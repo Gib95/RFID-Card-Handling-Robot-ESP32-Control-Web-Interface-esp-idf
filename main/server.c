@@ -13,6 +13,15 @@
 QueueHandle_t message_queue = NULL;  // Definición de la variable
 
 #define EXAMPLE_HTTP_QUERY_KEY_MAX_LEN  (64)
+#define InterfaceControl "InterfaceControl"
+
+#define MESSAGE "Haz clic en un boton para cambiar su texto."
+#define ERROR_MESSAGE "Debe quitar primero la tarjeta que esta posicionada"
+char * message = MESSAGE;
+
+
+
+
 
 /* A simple example that demonstrates how to create GET and POST
  * handlers for the web server.
@@ -23,21 +32,29 @@ typedef struct {
     const char* color;                   // Puntero a la variable de estado que cambia
     const char* label_off;         // Texto cuando el botón está desactivado
     const char* label_on;          // Texto cuando el botón está activado
+    const char* state;          // Texto cuando el botón está activado
 } Button;
 
 
 Button buttons[] = {
-    {"#4CAF50", "Sacar Tarjeta 1", "Pasar Tarjeta 1"},
-    {"#4CAF50", "Sacar Tarjeta 2", "Pasar Tarjeta 2"},
-    {"#4CAF50", "Sacar Tarjeta 3", "Pasar Tarjeta 3"}
+    {"#4CAF50", "Sacar Tarjeta 1", "Pasar Tarjeta 1", "OFF"},
+    {"#4CAF50", "Sacar Tarjeta 2", "Pasar Tarjeta 2", "OFF"},
+    {"#4CAF50", "Sacar Tarjeta 3", "Pasar Tarjeta 3", "OFF"},
+    {"#4CAF50", "Sacar Tarjeta 4", "Pasar Tarjeta 4", "OFF"},
+    {"#4CAF50", "Sacar Tarjeta 5", "Pasar Tarjeta 5", "OFF"},
+    {"#4CAF50", "Sacar Tarjeta 6", "Pasar Tarjeta 6", "OFF"},
+    {"#4CAF50", "Sacar Tarjeta 7", "Pasar Tarjeta 7", "OFF"},
+    {"#4CAF50", "Sacar Tarjeta 8", "Pasar Tarjeta 8", "OFF"}
 };
 
 #define NUM_BUTTONS (sizeof(buttons) / sizeof(buttons[0]))
 
 const char* button_texts[NUM_BUTTONS];
 const char* button_color[NUM_BUTTONS];
+const char* button_state[NUM_BUTTONS];
 const char* button_next_state[NUM_BUTTONS];
-const char* uri_text[NUM_BUTTONS];
+
+bool no_actualizar = true;
 
 static esp_err_t servo_on_http_handler()
 {
@@ -55,77 +72,7 @@ static esp_err_t servo_off_http_handler(){
     return ESP_OK;
 }
 
-esp_err_t any_handler(httpd_req_t *req)
-{
-
-    ESP_LOGW(HTTPServer, "URI -> %s", req->uri);
-    int posicion = 0;
-    char*  buf;
-    size_t buf_len;
-
-    buf_len = httpd_req_get_url_query_len(req) + 1;
-    if (buf_len > 1) {
-        buf = malloc(buf_len);
-        ESP_RETURN_ON_FALSE(buf, ESP_ERR_NO_MEM, HTTPServer, "buffer alloc failed");
-        if (httpd_req_get_url_query_str(req, buf, buf_len) == ESP_OK) {
-            ESP_LOGI(HTTPServer, "Found URL query => %s", buf);
-            char param[EXAMPLE_HTTP_QUERY_KEY_MAX_LEN], dec_param[EXAMPLE_HTTP_QUERY_KEY_MAX_LEN] = {0};
-            /* Get value of expected key from query string */
-            if (httpd_query_key_value(buf, "boton1", param, sizeof(param)) == ESP_OK) {
-                ESP_LOGI(HTTPServer, "Found URL query parameter => boton1=%s", param);
-                if (strcmp(param, "1") == 0){
-                    button_texts[0] = buttons[0].label_off;
-                    button_color[0] = "rgb(69, 157, 160)";
-                    button_next_state[0] = "0";
-
-                }
-                else{
-                    button_texts[0] = buttons[0].label_on;
-                    button_color[0] = "#45a049";
-                    button_next_state[0] = "1";
-
-                }
-                example_uri_decode(dec_param, param, strnlen(param, EXAMPLE_HTTP_QUERY_KEY_MAX_LEN));
-                ESP_LOGI(HTTPServer, "Decoded query parameter => %s", dec_param);
-            }
-            else if (httpd_query_key_value(buf, "boton2", param, sizeof(param)) == ESP_OK) {
-                ESP_LOGI(HTTPServer, "Found URL query parameter => boton2=%s", param);
-
-                if (strcmp(param, "1") == 0){
-                    button_texts[1] = buttons[1].label_off;
-                    button_color[1] = "rgb(69, 157, 160)";
-                    button_next_state[1] = "0";
-                }
-                else{
-                    button_texts[1] = buttons[1].label_on;
-                    button_color[1] = "#45a049";
-                    button_next_state[1] = "1";
-                }
-                example_uri_decode(dec_param, param, strnlen(param, EXAMPLE_HTTP_QUERY_KEY_MAX_LEN));
-                ESP_LOGI(HTTPServer, "Decoded query parameter => %s", dec_param);
-            }
-            else if (httpd_query_key_value(buf, "boton3", param, sizeof(param)) == ESP_OK) {
-                ESP_LOGI(HTTPServer, "Found URL query parameter => boton3=%s", param);
-
-                if (strcmp(param, "1") == 0){
-                    button_texts[2] = buttons[2].label_off;
-                    button_color[2] = "rgb(69, 157, 160)";
-                    button_next_state[2] = "0";
-
-                }
-                else{
-                    button_texts[2] = buttons[2].label_on;
-                    button_color[2] = "#45a049";
-                    button_next_state[2] = "1";
-
-                }
-                example_uri_decode(dec_param, param, strnlen(param, EXAMPLE_HTTP_QUERY_KEY_MAX_LEN));
-                ESP_LOGI(HTTPServer, "Decoded query parameter => %s", dec_param);
-            }
-        }
-        free(buf);
-    }
-
+esp_err_t refresh_web(httpd_req_t *req, bool no_actualizar, int indice){
     char response[2048*2];
     snprintf(response, sizeof(response),
         "<!DOCTYPE html>"
@@ -186,242 +133,155 @@ esp_err_t any_handler(httpd_req_t *req)
         "</head>"
         "<body>"
         "    <h1>Interfaz de Botones</h1>"
-        "    <p>Haz clic en un botón para cambiar su texto.</p>"
+        "    <p>\"%s\"</p>"
         "    <div class=\"button-container\">"
-        "        <form action=\"/cardOn1\" method=\"GET\">"
+        "        <form action=\"/InterfaceControl\" method=\"GET\">"
         "            <!-- Botón 1 que envía 'boton=0' al servidor -->"
         "            <button name=\"boton1\" value=\"%s\" style=\"background-color:%s;\">%s</button>"
         "        </form>"
-        "        <form action=\"/cardOn1\" method=\"GET\">"
+        "        <form action=\"/InterfaceControl\" method=\"GET\">"
         "            <!-- Botón 2 que envía 'boton=1' al servidor -->"
         "            <button name=\"boton2\" value=\"%s\" style=\"background-color:%s;\">%s</button>"
         "        </form>"
-        "        <form action=\"/cardOn1\" method=\"GET\">"
+        "        <form action=\"/InterfaceControl\" method=\"GET\">"
         "            <!-- Botón 3 que envía 'boton=2' al servidor -->"
         "            <button name=\"boton3\" value=\"%s\" style=\"background-color:%s;\">%s</button>"
+        "        </form>"      
+        "        <form action=\"/InterfaceControl\" method=\"GET\">"
+        "            <!-- Botón 1 que envía 'boton=0' al servidor -->"
+        "            <button name=\"boton4\" value=\"%s\" style=\"background-color:%s;\">%s</button>"
+        "        </form>"
+        "        <form action=\"/InterfaceControl\" method=\"GET\">"
+        "            <!-- Botón 2 que envía 'boton=1' al servidor -->"
+        "            <button name=\"boton5\" value=\"%s\" style=\"background-color:%s;\">%s</button>"
+        "        </form>"
+        "        <form action=\"/InterfaceControl\" method=\"GET\">"
+        "            <!-- Botón 3 que envía 'boton=2' al servidor -->"
+        "            <button name=\"boton6\" value=\"%s\" style=\"background-color:%s;\">%s</button>"
+        "        </form>"       
+        "        <form action=\"/InterfaceControl\" method=\"GET\">"
+        "            <!-- Botón 1 que envía 'boton=0' al servidor -->"
+        "            <button name=\"boton7\" value=\"%s\" style=\"background-color:%s;\">%s</button>"
+        "        </form>"
+        "        <form action=\"/InterfaceControl\" method=\"GET\">"
+        "            <!-- Botón 2 que envía 'boton=1' al servidor -->"
+        "            <button name=\"boton8\" value=\"%s\" style=\"background-color:%s;\">%s</button>"
         "        </form>"
         "    </div>"
         "</body>"
         "</html>",
-
+        message,
         button_next_state[0], button_color[0], button_texts[0], 
         button_next_state[1], button_color[1], button_texts[1], 
-        button_next_state[2], button_color[2], button_texts[2]);
+        button_next_state[2], button_color[2], button_texts[2],
+        button_next_state[3], button_color[3], button_texts[3], 
+        button_next_state[4], button_color[4], button_texts[4], 
+        button_next_state[5], button_color[5], button_texts[5],
+        button_next_state[6], button_color[6], button_texts[6], 
+        button_next_state[7], button_color[7], button_texts[7]);
+    if (!no_actualizar){
+        if (strcmp(button_next_state[indice], "ON") == 0) {
+            button_state[indice] ="OFF";
+        }
+        else{
+            button_state[indice] ="ON";
+        }
+
+        ESP_LOGW(HTTPServer, "Actualizando indice de tarjeta ");
+        ESP_LOGI(HTTPServer, "button_state[j] %s , button_next_state indice %s ",button_state[indice], button_next_state[indice]);
+        ESP_LOGI(HTTPServer, "%d", indice);
+    }
 
     // Enviar la respuesta HTML al cliente
     httpd_resp_send(req, response, HTTPD_RESP_USE_STRLEN);
     return ESP_OK;
 }
 
+void update_button_state(const char* param, int index) {
+    ESP_LOGW(HTTPServer, "update_button_state , param %s", param);
+    if (strcmp(param, "ON") == 0) {
+            button_texts[index] = buttons[index].label_off;
+            button_color[index] = "rgb(69, 157, 160)";
+            button_next_state[index] = "OFF";
+    } else {
+        button_texts[index] = buttons[index].label_on;
+        button_color[index] = "#45a049";
+        button_next_state[index] = "ON";
+    }
+}
 
-
-/* An HTTP GET handler */
-static esp_err_t hello_get_handler(httpd_req_t *req)
-{
-    char*  buf;
+static esp_err_t any_handler(httpd_req_t *req) {
+    char* buf;
     size_t buf_len;
-
-    /* Get header value string length and allocate memory for length + 1,
-     * extra byte for null termination */
-    buf_len = httpd_req_get_hdr_value_len(req, "Host") + 1;
-    if (buf_len > 1) {
-        buf = malloc(buf_len);
-        ESP_RETURN_ON_FALSE(buf, ESP_ERR_NO_MEM, HTTPServer, "buffer alloc failed");
-        /* Copy null terminated value string into buffer */
-        if (httpd_req_get_hdr_value_str(req, "Host", buf, buf_len) == ESP_OK) {
-            ESP_LOGI(HTTPServer, "Found header => Host: %s", buf);
-        }
-        free(buf);
-    }
-
-    buf_len = httpd_req_get_hdr_value_len(req, "Test-Header-2") + 1;
-    if (buf_len > 1) {
-        buf = malloc(buf_len);
-        ESP_RETURN_ON_FALSE(buf, ESP_ERR_NO_MEM, HTTPServer, "buffer alloc failed");
-        if (httpd_req_get_hdr_value_str(req, "Test-Header-2", buf, buf_len) == ESP_OK) {
-            ESP_LOGI(HTTPServer, "Found header => Test-Header-2: %s", buf);
-        }
-        free(buf);
-    }
-
-    buf_len = httpd_req_get_hdr_value_len(req, "Test-Header-1") + 1;
-    if (buf_len > 1) {
-        buf = malloc(buf_len);
-        ESP_RETURN_ON_FALSE(buf, ESP_ERR_NO_MEM, HTTPServer, "buffer alloc failed");
-        if (httpd_req_get_hdr_value_str(req, "Test-Header-1", buf, buf_len) == ESP_OK) {
-            ESP_LOGI(HTTPServer, "Found header => Test-Header-1: %s", buf);
-        }
-        free(buf);
-    }
-
-    /* Read URL query string length and allocate memory for length + 1,
-     * extra byte for null termination */
+    ESP_LOGW(HTTPServer, "Found URL query => %s", req->uri);
+    int indice_boton = 0;
     buf_len = httpd_req_get_url_query_len(req) + 1;
     if (buf_len > 1) {
         buf = malloc(buf_len);
         ESP_RETURN_ON_FALSE(buf, ESP_ERR_NO_MEM, HTTPServer, "buffer alloc failed");
+
+        // Obtener la cadena de la URL
         if (httpd_req_get_url_query_str(req, buf, buf_len) == ESP_OK) {
             ESP_LOGI(HTTPServer, "Found URL query => %s", buf);
-            char param[EXAMPLE_HTTP_QUERY_KEY_MAX_LEN], dec_param[EXAMPLE_HTTP_QUERY_KEY_MAX_LEN] = {0};
-            /* Get value of expected key from query string */
-            if (httpd_query_key_value(buf, "query1", param, sizeof(param)) == ESP_OK) {
-                ESP_LOGI(HTTPServer, "Found URL query parameter => query1=%s", param);
-                example_uri_decode(dec_param, param, strnlen(param, EXAMPLE_HTTP_QUERY_KEY_MAX_LEN));
-                ESP_LOGI(HTTPServer, "Decoded query parameter => %s", dec_param);
-            }
-            if (httpd_query_key_value(buf, "query3", param, sizeof(param)) == ESP_OK) {
-                ESP_LOGI(HTTPServer, "Found URL query parameter => query3=%s", param);
-                example_uri_decode(dec_param, param, strnlen(param, EXAMPLE_HTTP_QUERY_KEY_MAX_LEN));
-                ESP_LOGI(HTTPServer, "Decoded query parameter => %s", dec_param);
-            }
-            if (httpd_query_key_value(buf, "query2", param, sizeof(param)) == ESP_OK) {
-                ESP_LOGI(HTTPServer, "Found URL query parameter => query2=%s", param);
-                example_uri_decode(dec_param, param, strnlen(param, EXAMPLE_HTTP_QUERY_KEY_MAX_LEN));
-                ESP_LOGI(HTTPServer, "Decoded query parameter => %s", dec_param);
+
+            // Para cada botón (boton1, boton2, boton3, etc.), actualizamos su estado
+            for (int i = 0; i < NUM_BUTTONS; i++) {  // Ajusta el límite del bucle según el número de botones
+                char param[EXAMPLE_HTTP_QUERY_KEY_MAX_LEN], dec_param[EXAMPLE_HTTP_QUERY_KEY_MAX_LEN] = {0};
+                char query_name[10];  // Nombre del parámetro como "boton1", "boton2", etc.
+                snprintf(query_name, sizeof(query_name), "boton%d", i + 1);
+                ESP_LOGI(HTTPServer, "boton%d state %s", i , button_state[i]);
+
+                if (httpd_query_key_value(buf, query_name, param, sizeof(param)) == ESP_OK) {
+                    ESP_LOGI(HTTPServer, "Found URL query parameter => %s=%s", query_name, param);
+                    if (strcmp(param, "ON") == 0) {
+                        for (int j = 0; j < NUM_BUTTONS; j++){
+                            ESP_LOGI(HTTPServer, "button_state[j] %s i %d  j %d", button_state[j],i,j);
+
+                            if (j == i) continue;
+                            ESP_LOGI(HTTPServer, "button_state[j] %s i %d  j %d", button_state[j],i,j);
+
+                            if (strcmp(button_state[j], "ON") == 0){
+                                ESP_LOGE(HTTPServer, "ERROR_MESSAGE %s ", ERROR_MESSAGE);
+
+                                message = ERROR_MESSAGE;
+                                no_actualizar = true;
+                                break;
+                            }
+                            no_actualizar = false;
+                        }
+                        if (!no_actualizar){
+                            message = MESSAGE;
+                            update_button_state(param, i);  // Actualiza el estado del botón usando la función
+                            example_uri_decode(dec_param, param, strnlen(param, EXAMPLE_HTTP_QUERY_KEY_MAX_LEN));
+                            ESP_LOGW(HTTPServer, "se actualiza el boton => %s", dec_param);
+                        }
+                    }
+                    else{
+                        message = MESSAGE;
+                        update_button_state(param, i);  // Actualiza el estado del botón usando la función
+                        example_uri_decode(dec_param, param, strnlen(param, EXAMPLE_HTTP_QUERY_KEY_MAX_LEN));
+                        ESP_LOGW(HTTPServer, "desactivando el boton => %s", dec_param);
+                        no_actualizar = false;
+
+                    }
+                    break;
+                }
+                indice_boton++;
             }
         }
         free(buf);
     }
-
-    /* Set some custom headers */
-    httpd_resp_set_hdr(req, "Custom-Header-1", "Custom-Value-1");
-    httpd_resp_set_hdr(req, "Custom-Header-2", "Custom-Value-2");
-
-    /* Send response with custom headers and body set as the
-     * string passed in user context*/
-    const char* resp_str = (const char*) req->user_ctx;
-    httpd_resp_send(req, resp_str, HTTPD_RESP_USE_STRLEN);
-
-    /* After sending the HTTP response the old HTTP request
-     * headers are lost. Check if HTTP request headers can be read now. */
-    if (httpd_req_get_hdr_value_len(req, "Host") == 0) {
-        ESP_LOGI(HTTPServer, "Request headers lost");
-    }
+    refresh_web(req, no_actualizar, indice_boton);
     return ESP_OK;
 }
-
-static const httpd_uri_t hello = {
-    .uri       = "/hello",
-    .method    = HTTP_GET,
-    .handler   = hello_get_handler,
-    /* Let's pass response string in user
-     * context to demonstrate it's usage */
-    .user_ctx  = "Hello World!"
-};
-
-/* An HTTP POST handler */
-static esp_err_t echo_post_handler(httpd_req_t *req)
-{
-    char buf[100];
-    int ret, remaining = req->content_len;
-
-    while (remaining > 0) {
-        /* Read the data for the request */
-        if ((ret = httpd_req_recv(req, buf,
-                        MIN(remaining, sizeof(buf)))) <= 0) {
-            if (ret == HTTPD_SOCK_ERR_TIMEOUT) {
-                /* Retry receiving if timeout occurred */
-                continue;
-            }
-            return ESP_FAIL;
-        }
-
-        /* Send back the same data */
-        httpd_resp_send_chunk(req, buf, ret);
-        remaining -= ret;
-
-        /* Log data received */
-        ESP_LOGI(HTTPServer, "=========== RECEIVED DATA ==========");
-        ESP_LOGI(HTTPServer, "%.*s", ret, buf);
-        ESP_LOGI(HTTPServer, "====================================");
-    }
-
-    // End response
-    httpd_resp_send_chunk(req, NULL, 0);
-    return ESP_OK;
-}
-
-static const httpd_uri_t echo = {
-    .uri       = "/echo",
-    .method    = HTTP_POST,
-    .handler   = echo_post_handler,
-    .user_ctx  = NULL
-};
-
-// /* An HTTP_ANY handler */
-// static esp_err_t any_handler(httpd_req_t *req)
-// {
-//     /* Send response with body set as the
-//      * string passed in user context*/
-//     const char* resp_str = (const char*) req->user_ctx;
-//     httpd_resp_send(req, resp_str, HTTPD_RESP_USE_STRLEN);
-
-//     // End response
-//     httpd_resp_send_chunk(req, NULL, 0);
-//     return ESP_OK;
-// }
-
-static const httpd_uri_t any = {
-    .uri       = "/any",
-    .method    = HTTP_ANY,
-    .handler   = any_handler,
-    /* Let's pass response string in user
-     * context to demonstrate it's usage */
-    .user_ctx  = "Hello World!"
-};
-
-
-static const httpd_uri_t cardOn1 = {
-    .uri       = "/cardOn1",
+static const httpd_uri_t Interface = {
+    .uri       = "/InterfaceControl",
     .method    = HTTP_ANY,
     .handler   = any_handler,
     /* Let's pass response string in user
      * context to demonstrate it's usage */
     .user_ctx  = NULL
 };
-
-// static const httpd_uri_t cardOff1 = {
-//     .uri       = "/cardOff1",
-//     .method    = HTTP_ANY,
-//     .handler   = any_handler,
-//     /* Let's pass response string in user
-//      * context to demonstrate it's usage */
-//     .user_ctx  = NULL
-// };
-
-// static const httpd_uri_t cardOn2 = {
-//     .uri       = "/cardOn2",
-//     .method    = HTTP_ANY,
-//     .handler   = any_handler,
-//     /* Let's pass response string in user
-//      * context to demonstrate it's usage */
-//     .user_ctx  = NULL
-// };
-
-// static const httpd_uri_t cardOff2 = {
-//     .uri       = "/cardOff2",
-//     .method    = HTTP_ANY,
-//     .handler   = any_handler,
-//     /* Let's pass response string in user
-//      * context to demonstrate it's usage */
-//     .user_ctx  = NULL
-// };static const httpd_uri_t cardOn3 = {
-//     .uri       = "/cardOn3",
-//     .method    = HTTP_ANY,
-//     .handler   = any_handler,
-//     /* Let's pass response string in user
-//      * context to demonstrate it's usage */
-//     .user_ctx  = NULL
-// };
-
-// static const httpd_uri_t cardOff3 = {
-//     .uri       = "/cardOff3",
-//     .method    = HTTP_ANY,
-//     .handler   = any_handler,
-//     /* Let's pass response string in user
-//      * context to demonstrate it's usage */
-//     .user_ctx  = NULL
-// };
 
 static const httpd_uri_t index_ = {
     .uri       = "/",
@@ -432,77 +292,6 @@ static const httpd_uri_t index_ = {
     .user_ctx  = NULL  
 };
 
-
-/* This handler allows the custom error handling functionality to be
- * tested from client side. For that, when a PUT request 0 is sent to
- * URI /ctrl, the /hello and /echo URIs are unregistered and following
- * custom error handler http_404_error_handler() is registered.
- * Afterwards, when /hello or /echo is requested, this custom error
- * handler is invoked which, after sending an error message to client,
- * either closes the underlying socket (when requested URI is /echo)
- * or keeps it open (when requested URI is /hello). This allows the
- * client to infer if the custom error handler is functioning as expected
- * by observing the socket state.
- */
-esp_err_t http_404_error_handler(httpd_req_t *req, httpd_err_code_t err)
-{
-    if (strcmp("/hello", req->uri) == 0) {
-        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "/hello URI is not available");
-        /* Return ESP_OK to keep underlying socket open */
-        return ESP_OK;
-    } else if (strcmp("/echo", req->uri) == 0) {
-        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "/echo URI is not available");
-        /* Return ESP_FAIL to close underlying socket */
-        return ESP_FAIL;
-    }
-    /* For any other URI send 404 and close socket */
-    httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "Some 404 error message");
-    return ESP_FAIL;
-}
-
-/* An HTTP PUT handler. This demonstrates realtime
- * registration and deregistration of URI handlers
- */
-static esp_err_t ctrl_put_handler(httpd_req_t *req)
-{
-    char buf;
-    int ret;
-
-    if ((ret = httpd_req_recv(req, &buf, 1)) <= 0) {
-        if (ret == HTTPD_SOCK_ERR_TIMEOUT) {
-            httpd_resp_send_408(req);
-        }
-        return ESP_FAIL;
-    }
-
-    if (buf == '0') {
-        /* URI handlers can be unregistered using the uri string */
-        ESP_LOGI(HTTPServer, "Unregistering /hello and /echo URIs");
-        httpd_unregister_uri(req->handle, "/hello");
-        httpd_unregister_uri(req->handle, "/echo");
-        /* Register the custom error handler */
-        httpd_register_err_handler(req->handle, HTTPD_404_NOT_FOUND, http_404_error_handler);
-    }
-    else {
-        ESP_LOGI(HTTPServer, "Registering /hello and /echo URIs");
-        httpd_register_uri_handler(req->handle, &hello);
-        httpd_register_uri_handler(req->handle, &echo);
-        /* Unregister custom error handler */
-        httpd_register_err_handler(req->handle, HTTPD_404_NOT_FOUND, NULL);
-    }
-
-    /* Respond with empty body */
-    httpd_resp_send(req, NULL, 0);
-    return ESP_OK;
-}
-
-static const httpd_uri_t ctrl = {
-    .uri       = "/ctrl",
-    .method    = HTTP_PUT,
-    .handler   = ctrl_put_handler,
-    .user_ctx  = NULL
-};
-
 static httpd_handle_t start_webserver(void)
 {
     httpd_handle_t server = NULL;
@@ -510,7 +299,8 @@ static httpd_handle_t start_webserver(void)
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.stack_size = 8192;  // Ajusta este valor según sea necesario, por ejemplo, 8192 bytes
     for (int i = 0; i < NUM_BUTTONS; i++) {
-        button_next_state[i] = "1";  // Establecer como activado
+        button_state[i] = "OFF";  
+        button_next_state[i] = "ON";  
         button_texts[i] = buttons[i].label_on;
         button_color[i] = buttons[i].color;
     }
@@ -529,18 +319,8 @@ static httpd_handle_t start_webserver(void)
     if (httpd_start(&server, &config) == ESP_OK) {
         // Set URI handlers
         ESP_LOGI(HTTPServer, "Registering URI handlers");
-        httpd_register_uri_handler(server, &hello);
         httpd_register_uri_handler(server, &index_);
-        httpd_register_uri_handler(server, &cardOn1);
-        // httpd_register_uri_handler(server, &cardOff1);        
-        // httpd_register_uri_handler(server, &cardOn2);
-        // httpd_register_uri_handler(server, &cardOff2);        
-        // httpd_register_uri_handler(server, &cardOn3);
-        // httpd_register_uri_handler(server, &cardOff3);
-
-        httpd_register_uri_handler(server, &echo);
-        httpd_register_uri_handler(server, &ctrl);
-        httpd_register_uri_handler(server, &any);
+        httpd_register_uri_handler(server, &Interface);
         return server;
     }
 
@@ -580,7 +360,7 @@ static void connect_handler(void* arg, esp_event_base_t event_base,
 }
 #endif // !CONFIG_IDF_TARGET_LINUX
 
-void start_server_task(void *pvParameter)
+void start_server_task()
 {
     static httpd_handle_t server = NULL;
     /* Register event handlers to stop the server when Wi-Fi or Ethernet is disconnected,

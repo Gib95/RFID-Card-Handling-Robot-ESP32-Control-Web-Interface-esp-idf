@@ -33,7 +33,7 @@ extern "C" {
 #endif
 
 // Declaración de la función para iniciar el servidor
-void start_server_task(void *pvParameter);
+void start_server_task();
 
 #ifdef __cplusplus
 }
