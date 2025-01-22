@@ -53,8 +53,8 @@ extern "C" void app_main(void)
     message_queue = xQueueCreate(10, sizeof(char*));
 
     // Crea una tarea para iniciar el servidor HTTP
-    xTaskCreate(start_server_task, "start_server_task", 8192, NULL, 5, NULL);
-
+    // xTaskCreate(start_server_task, "start_server_task", 8192, NULL, 5, NULL);
+    start_server_task();
     // Crea una tarea para mover el servo según los mensajes recibidos
     xTaskCreate(move_servo_task, "move_servo_task", 2048, NULL, 5, NULL);
 }
