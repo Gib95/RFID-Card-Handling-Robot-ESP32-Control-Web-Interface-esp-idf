@@ -19,10 +19,6 @@ QueueHandle_t message_queue = NULL;  // Definición de la variable
 #define ERROR_MESSAGE "Debe quitar primero la tarjeta que esta posicionada"
 char * message = MESSAGE;
 
-
-
-
-
 /* A simple example that demonstrates how to create GET and POST
  * handlers for the web server.
  */
@@ -56,18 +52,9 @@ const char* button_next_state[NUM_BUTTONS];
 
 bool no_actualizar = true;
 
-static esp_err_t servo_on_http_handler()
+static esp_err_t servo_http_handler(const char* move_message)
 {
-    // Definir el mensaje por defecto
-    const char* move_message = "DEFAULT_MOVE";
-    move_message = "MOVE_SERVO1";  // Mensaje para cardOn
-    xQueueSend(message_queue, &move_message, portMAX_DELAY);
-    return ESP_OK;
-}
-
-static esp_err_t servo_off_http_handler(){
-    const char* move_message = "DEFAULT_MOVE";
-    move_message = "MOVE_SERVO2";  // Mensaje para cardOff
+    ESP_LOGW(HTTPServer, "servo_http_handler ");
     xQueueSend(message_queue, &move_message, portMAX_DELAY);
     return ESP_OK;
 }
@@ -180,13 +167,16 @@ esp_err_t refresh_web(httpd_req_t *req, bool no_actualizar, int indice){
         button_next_state[6], button_color[6], button_texts[6], 
         button_next_state[7], button_color[7], button_texts[7]);
     if (!no_actualizar){
+        char query_name[26];  // Nombre del parámetro como "boton1", "boton2", etc.
         if (strcmp(button_next_state[indice], "ON") == 0) {
             button_state[indice] ="OFF";
+            snprintf(query_name, sizeof(query_name), "MOVE_SERVO_%s%d",button_state[indice], indice + 1);
         }
         else{
             button_state[indice] ="ON";
+            snprintf(query_name, sizeof(query_name), "MOVE_SERVO_%s%d",button_state[indice], indice + 1);
         }
-
+        servo_http_handler(query_name);
         ESP_LOGW(HTTPServer, "Actualizando indice de tarjeta ");
         ESP_LOGI(HTTPServer, "button_state[j] %s , button_next_state indice %s ",button_state[indice], button_next_state[indice]);
         ESP_LOGI(HTTPServer, "%d", indice);
@@ -360,7 +350,7 @@ static void connect_handler(void* arg, esp_event_base_t event_base,
 }
 #endif // !CONFIG_IDF_TARGET_LINUX
 
-void start_server_task()
+void start_server_task(void *pvParameters)
 {
     static httpd_handle_t server = NULL;
     /* Register event handlers to stop the server when Wi-Fi or Ethernet is disconnected,
