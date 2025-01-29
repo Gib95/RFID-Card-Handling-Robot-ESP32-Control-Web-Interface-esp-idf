@@ -1,6 +1,6 @@
 #include "servoMotor.h"
+#include <math.h>
 
-// Función para inicializar el PWM del servo
 void ServoMotor::init_servo_pwm(int gpio) {
     ESP_LOGI(TAG, "Create timer and operator");
     
@@ -78,16 +78,143 @@ ServoMotor::~ServoMotor() {
 }
 
 
-void ServoMotor::move_servo(int angle) {
+void ServoMotor::move_to_target_angle(int angle) {
     ESP_LOGI(TAG, "Moving servo to angle: %d", angle);
-
     ESP_ERROR_CHECK(mcpwm_comparator_set_compare_value(comparator, angle_to_compare(angle)));
+}
 
-    vTaskDelay(pdMS_TO_TICKS(10)); // Espera un poco para el movimiento
+void ServoMotor::move_servo(int target_angle) {
+    int step = (target_angle > last_position) ? 1 : -1;  // Determina si incrementar o decrementar
+    // Mueve gradualmente hasta llegar al ángulo objetivo
+    while (last_position != target_angle) {
+        last_position += step;
+        move_to_target_angle(last_position);  // Mueve el servomotor al ángulo actual
+        vTaskDelay(pdMS_TO_TICKS(speed));  // Controla la velocidad (delay entre movimientos)
+    }
+    ESP_LOGI(TAG, "Reached target angle: %d", target_angle);
+}
+void ServoMotor::setSpeed(int _speed) {
+    speed = _speed;
 }
 
 
 // Función auxiliar para convertir el ángulo a un valor de comparación de PWM
 uint32_t ServoMotor::angle_to_compare(int angle) {
     return (angle - SERVO_MIN_DEGREE) * (SERVO_MAX_PULSEWIDTH_US - SERVO_MIN_PULSEWIDTH_US) / (SERVO_MAX_DEGREE - SERVO_MIN_DEGREE) + SERVO_MIN_PULSEWIDTH_US;
+}
+
+
+const char* TAG = "move_servo_task";
+
+ServoMotor servoA(SERVO_PULSE_GPIO_A, "servoA");
+ServoMotor servoB(SERVO_PULSE_GPIO_B, "servoB");
+
+int calculate_delay(int current_position, int previous_position) {
+    ESP_LOGI(TAG, "calculate_delay");
+
+    int difference = abs(current_position - previous_position);
+        if (difference == 8) {
+        return 700; // 700 ms para la máxima diferencia
+    }
+    // Si la diferencia es mínima (por ejemplo, de 1 a 2, o de 7 a 8)
+    else if (difference == 1) {
+        return 100; // 100 ms para la mínima diferencia
+    } 
+    else {
+        float delay = 100 + (difference / 8.0) * (DELAYTIME - 80);
+        return (int) delay;
+    }
+}
+
+
+void move_servo_task(void *pvParameters) {
+    char *message;    
+    char *message_copy = (char *)malloc(100 * sizeof(char)); 
+
+    ESP_LOGW(TAG, "move_servo_task alive");
+    int servoA_input = 0;
+    int previous_position = 0;
+    while (1) {      
+        if (xQueueReceive(message_queue, &message, portMAX_DELAY) == pdPASS) {
+            memcpy(message_copy, message, 26);
+            ESP_LOGW(TAG, "Mensaje recibido: %s", message_copy);
+            
+            if (strcmp(message_copy, "MOVE_SERVO_ON1") == 0) {
+                servoA_input = 1;
+                servoA.move_servo(0);  // Mover servo A a 0
+                vTaskDelay(calculate_delay(servoA_input, previous_position) / portTICK_PERIOD_MS);  // Espera según la diferencia con la posición anterior
+                servoB.move_servo(0);  // Mover servo B
+            } 
+            else if (strcmp(message_copy, "MOVE_SERVO_OFF1") == 0) {
+                servoB.move_servo(50);
+            }                        
+            else if (strcmp(message_copy, "MOVE_SERVO_ON2") == 0) {
+                servoA_input = 2;
+                servoA.move_servo(45);
+                vTaskDelay(calculate_delay(servoA_input, previous_position) / portTICK_PERIOD_MS);  // Espera según la diferencia con la posición anterior
+                servoB.move_servo(0);
+            }            
+            else if (strcmp(message_copy, "MOVE_SERVO_OFF2") == 0) {
+                servoB.move_servo(50);
+            } 
+            else if (strcmp(message_copy, "MOVE_SERVO_ON3") == 0) {
+                servoA_input = 3;
+                servoA.move_servo(90);
+                vTaskDelay(calculate_delay(servoA_input, previous_position) / portTICK_PERIOD_MS);  // Espera según la diferencia con la posición anterior
+                servoB.move_servo(0);
+            }             
+            else if (strcmp(message_copy, "MOVE_SERVO_OFF3") == 0) {
+                servoB.move_servo(50);
+            }  
+            else if (strcmp(message_copy, "MOVE_SERVO_ON4") == 0) {
+                servoA_input = 4;
+                servoA.move_servo(135);
+                vTaskDelay(calculate_delay(servoA_input, previous_position) / portTICK_PERIOD_MS);  // Espera según la diferencia con la posición anterior
+                servoB.move_servo(0);
+            }  
+            else if (strcmp(message_copy, "MOVE_SERVO_OFF4") == 0) {
+                servoB.move_servo(50);
+            }  
+            else if (strcmp(message_copy, "MOVE_SERVO_ON5") == 0) {
+                servoA_input = 5;
+                servoA.move_servo(180);
+                vTaskDelay(calculate_delay(servoA_input, previous_position) / portTICK_PERIOD_MS);  // Espera según la diferencia con la posición anterior
+                servoB.move_servo(0);
+            }  
+            else if (strcmp(message_copy, "MOVE_SERVO_OFF5") == 0) {
+                servoB.move_servo(20);
+            }  
+            else if (strcmp(message_copy, "MOVE_SERVO_ON6") == 0) {
+                servoA_input = 6;
+                servoA.move_servo(84);
+                vTaskDelay(calculate_delay(servoA_input, previous_position) / portTICK_PERIOD_MS);  // Espera según la diferencia con la posición anterior
+                servoB.move_servo(0);
+            }  
+            else if (strcmp(message_copy, "MOVE_SERVO_OFF6") == 0) {
+                servoB.move_servo(20);
+            }  
+            else if (strcmp(message_copy, "MOVE_SERVO_ON7") == 0) {
+                servoA_input = 7;
+                servoA.move_servo(100);
+                vTaskDelay(calculate_delay(servoA_input, previous_position) / portTICK_PERIOD_MS);  // Espera según la diferencia con la posición anterior
+                servoB.move_servo(0);
+            }  
+            else if (strcmp(message_copy, "MOVE_SERVO_OFF7") == 0) {
+                servoB.move_servo(20);
+            }  
+            else if (strcmp(message_copy, "MOVE_SERVO_ON8") == 0) {
+                servoA_input = 8;
+                servoA.move_servo(115);
+                vTaskDelay(calculate_delay(servoA_input, previous_position) / portTICK_PERIOD_MS);  // Espera según la diferencia con la posición anterior
+                servoB.move_servo(0);
+            }  
+            else if (strcmp(message_copy, "MOVE_SERVO_OFF8") == 0) {
+                servoB.move_servo(20);
+            }
+            else{ 
+                ESP_LOGE(TAG, "ERROR: no hay actuacion para el mensaje: %s", message_copy);
+            }
+            previous_position = servoA_input;  // Actualizar la posición anterior
+        }
+    }
 }

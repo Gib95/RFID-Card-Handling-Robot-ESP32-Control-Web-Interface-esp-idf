@@ -5,6 +5,9 @@
 #include "freertos/task.h"
 #include "driver/mcpwm_prelude.h"
 #include "esp_log.h"
+#include <string.h>
+#include <stdlib.h>
+
 
 #define SERVO_PIN 13
 #define SERVO_MIN_DEGREE 0
@@ -14,6 +17,17 @@
 #define SERVO_TIMEBASE_RESOLUTION_HZ 1000000
 #define SERVO_TIMEBASE_PERIOD 20000
 
+#define SERVO_PULSE_GPIO_A      13
+#define SERVO_PULSE_GPIO_B      12
+#define DELAYTIME      500
+
+#define MAX_POSITION 8
+#define MIN_POSITION 0
+
+extern QueueHandle_t message_queue;  // Declaración externa de message_queue
+
+void move_servo_task(void *pvParameters);
+
 class ServoMotor {
 public:
     // Constructor
@@ -21,17 +35,15 @@ public:
 
     // Destructor
     ~ServoMotor();
-
-    // Método para mover el servo a un ángulo específico
     void move_servo(int angle);
-
-    // Función para inicializar el PWM
     void init_servo_pwm(int gpio);
+    void setSpeed(int _speed);
 
 private:
-    // Función para convertir el ángulo a valor de comparación
+    void move_to_target_angle(int angle);
     uint32_t angle_to_compare(int angle);
-
+    int last_position = 0;
+    int speed = 10;
     // Miembro privado: el comparador que usaremos en el PWM
     mcpwm_cmpr_handle_t comparator;
     const char* TAG = "";
