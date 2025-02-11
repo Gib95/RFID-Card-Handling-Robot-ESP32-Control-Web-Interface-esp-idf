@@ -31,6 +31,34 @@ typedef struct {
     const char* state;          // Texto cuando el botón está activado
 } Button;
 
+typedef enum {
+    MOTOR_0 = 0x0001,  // Motor 1 -> Bit 0 (1)
+    MOTOR_1 = 0x0001,  // Motor 1 -> Bit 0 (1)
+    MOTOR_2 = 0x0002,  // Motor 2 -> Bit 1 (2)
+    MOTOR_3 = 0x0004,  // Motor 3 -> Bit 2 (4)
+    MOTOR_4 = 0x0008,  // Motor 4 -> Bit 3 (8)
+    MOTOR_5 = 0x0010,  // Motor 5 -> Bit 4 (16)
+    MOTOR_6 = 0x0020,  // Motor 6 -> Bit 5 (32)
+    MOTOR_7 = 0x0040,  // Motor 7 -> Bit 6 (64)
+    MOTOR_8 = 0x0080,  // Motor 8 -> Bit 7 (128)
+    MOTOR_9 = 0x0100,  // Motor 9 -> Bit 8 (256)
+    MOTOR_10 = 0x0200  // Motor 10 -> Bit 9 (512)
+} MotorBit;
+
+// Array que asocia el número del motor con su valor de bit
+const uint16_t motorBits[] = {
+    MOTOR_0,  // Motor 1 -> 0x0001
+    MOTOR_1,  // Motor 1 -> 0x0001
+    MOTOR_2,  // Motor 2 -> 0x0002
+    MOTOR_3,  // Motor 3 -> 0x0004
+    MOTOR_4,  // Motor 4 -> 0x0008
+    MOTOR_5,  // Motor 5 -> 0x0010
+    MOTOR_6,  // Motor 6 -> 0x0020
+    MOTOR_7,  // Motor 7 -> 0x0040
+    MOTOR_8,  // Motor 8 -> 0x0080
+    MOTOR_9,  // Motor 9 -> 0x0100
+    MOTOR_10  // Motor 10 -> 0x0200
+};
 
 Button buttons[] = {
     {"#4CAF50", "Sacar Tarjeta 1", "Pasar Tarjeta 1", "OFF"},
@@ -52,15 +80,22 @@ const char* button_next_state[NUM_BUTTONS];
 
 bool no_actualizar = true;
 
-static esp_err_t servo_http_handler(const char* move_message)
+static esp_err_t servo_http_handler(uint16_t num_motor)
 {
     ESP_LOGW(HTTPServer, "servo_http_handler ");
-    xQueueSend(message_queue, &move_message, portMAX_DELAY);
+    if (num_motor==0)
+    {
+        xQueueSend(message_queue, &num_motor, portMAX_DELAY);
+        return ESP_OK;
+    }
+    xQueueSend(message_queue, &motorBits[num_motor], portMAX_DELAY);
+
     return ESP_OK;
 }
 
 esp_err_t refresh_web(httpd_req_t *req, bool no_actualizar, int indice){
     char response[2048*2];
+    uint16_t valor = 0;
     snprintf(response, sizeof(response),
         "<!DOCTYPE html>"
         "<html lang=\"es\">"
@@ -166,21 +201,22 @@ esp_err_t refresh_web(httpd_req_t *req, bool no_actualizar, int indice){
         button_next_state[5], button_color[5], button_texts[5],
         button_next_state[6], button_color[6], button_texts[6], 
         button_next_state[7], button_color[7], button_texts[7]);
+    
+    valor = 0;
     if (!no_actualizar){
         char query_name[26];  // Nombre del parámetro como "boton1", "boton2", etc.
         if (strcmp(button_next_state[indice], "ON") == 0) {
             button_state[indice] ="OFF";
-            snprintf(query_name, sizeof(query_name), "MOVE_SERVO_%s%d",button_state[indice], indice + 1);
         }
         else{
             button_state[indice] ="ON";
-            snprintf(query_name, sizeof(query_name), "MOVE_SERVO_%s%d",button_state[indice], indice + 1);
+            valor = indice+1;
         }
-        servo_http_handler(query_name);
-        ESP_LOGW(HTTPServer, "Actualizando indice de tarjeta ");
+        ESP_LOGW(HTTPServer, "Actualizando indice de tarjeta %d", indice);
         ESP_LOGI(HTTPServer, "button_state[j] %s , button_next_state indice %s ",button_state[indice], button_next_state[indice]);
         ESP_LOGI(HTTPServer, "%d", indice);
     }
+    servo_http_handler(valor);
 
     // Enviar la respuesta HTML al cliente
     httpd_resp_send(req, response, HTTPD_RESP_USE_STRLEN);
@@ -225,13 +261,13 @@ static esp_err_t any_handler(httpd_req_t *req) {
                     ESP_LOGI(HTTPServer, "Found URL query parameter => %s=%s", query_name, param);
                     if (strcmp(param, "ON") == 0) {
                         for (int j = 0; j < NUM_BUTTONS; j++){
-                            ESP_LOGI(HTTPServer, "button_state[j] %s i %d  j %d", button_state[j],i,j);
+                            // ESP_LOGI(HTTPServer, "button_state[j] %s i %d  j %d", button_state[j],i,j);
 
                             if (j == i) continue;
-                            ESP_LOGI(HTTPServer, "button_state[j] %s i %d  j %d", button_state[j],i,j);
+                            // ESP_LOGI(HTTPServer, "button_state[j] %s i %d  j %d", button_state[j],i,j);
 
                             if (strcmp(button_state[j], "ON") == 0){
-                                ESP_LOGE(HTTPServer, "ERROR_MESSAGE %s ", ERROR_MESSAGE);
+                                // ESP_LOGE(HTTPServer, "ERROR_MESSAGE %s ", ERROR_MESSAGE);
 
                                 message = ERROR_MESSAGE;
                                 no_actualizar = true;
@@ -266,7 +302,7 @@ static esp_err_t any_handler(httpd_req_t *req) {
 }
 static const httpd_uri_t Interface = {
     .uri       = "/InterfaceControl",
-    .method    = HTTP_ANY,
+    .method    = HTTP_GET,
     .handler   = any_handler,
     /* Let's pass response string in user
      * context to demonstrate it's usage */
@@ -275,7 +311,7 @@ static const httpd_uri_t Interface = {
 
 static const httpd_uri_t index_ = {
     .uri       = "/",
-    .method    = HTTP_ANY,
+    .method    = HTTP_GET,
     .handler   = any_handler,
     /* Let's pass response string in user
      * context to demonstrate it's usage */
