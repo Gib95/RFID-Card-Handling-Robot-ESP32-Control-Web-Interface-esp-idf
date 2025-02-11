@@ -14,7 +14,7 @@ void init_wifi(void)
 extern "C" void app_main(void)
 {
     init_wifi();
-    message_queue = xQueueCreate(20, sizeof(char*));
+    message_queue = xQueueCreate(20, sizeof(uint16_t));
     xTaskCreate(start_server_task, "move_servo_task", 2048, NULL, 5, NULL);
     xTaskCreate(move_servo_task, "move_servo_task", 2048, NULL, 5, NULL);
         while (1) {   
