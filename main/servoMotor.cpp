@@ -1,5 +1,22 @@
 #include "servoMotor.h"
 #include <math.h>
+#define ANGLE_MOTOR (180/10)
+
+
+typedef enum {
+    MOTOR_1 = 0x0001,  // Motor 1 -> Bit 0 (1)
+    MOTOR_2 = 0x0002,  // Motor 2 -> Bit 1 (2)
+    MOTOR_3 = 0x0004,  // Motor 3 -> Bit 2 (4)
+    MOTOR_4 = 0x0008,  // Motor 4 -> Bit 3 (8)
+    MOTOR_5 = 0x0010,  // Motor 5 -> Bit 4 (16)
+    MOTOR_6 = 0x0020,  // Motor 6 -> Bit 5 (32)
+    MOTOR_7 = 0x0040,  // Motor 7 -> Bit 6 (64)
+    MOTOR_8 = 0x0080,  // Motor 8 -> Bit 7 (128)
+    MOTOR_9 = 0x0100,  // Motor 9 -> Bit 8 (256)
+    MOTOR_10 = 0x0200  // Motor 10 -> Bit 9 (512)
+} MotorBit;
+
+
 
 void ServoMotor::init_servo_pwm(int gpio) {
     ESP_LOGI(TAG, "Create timer and operator");
@@ -79,7 +96,7 @@ ServoMotor::~ServoMotor() {
 
 
 void ServoMotor::move_to_target_angle(int angle) {
-    ESP_LOGI(TAG, "Moving servo to angle: %d", angle);
+    // ESP_LOGI(TAG, "Moving servo to angle: %d", angle);
     ESP_ERROR_CHECK(mcpwm_comparator_set_compare_value(comparator, angle_to_compare(angle)));
 }
 
@@ -128,91 +145,67 @@ int calculate_delay(int current_position, int previous_position) {
 
 
 void move_servo_task(void *pvParameters) {
-    char *message;    
-    char *message_copy = (char *)malloc(100 * sizeof(char)); 
-
+    uint16_t message;    
     ESP_LOGW(TAG, "move_servo_task alive");
     int servoA_input = 0;
     int previous_position = 0;
     while (1) {      
         if (xQueueReceive(message_queue, &message, portMAX_DELAY) == pdPASS) {
-            memcpy(message_copy, message, 26);
-            ESP_LOGW(TAG, "Mensaje recibido: %s", message_copy);
+            ESP_LOGW(TAG, "Mensaje recibido: %d", message);
             
-            if (strcmp(message_copy, "MOVE_SERVO_ON1") == 0) {
+            if (message&MOTOR_1) {
                 servoA_input = 1;
-                servoA.move_servo(0);  // Mover servo A a 0
+                servoA.move_servo((servoA_input-1)*ANGLE_MOTOR);
                 vTaskDelay(calculate_delay(servoA_input, previous_position) / portTICK_PERIOD_MS);  // Espera según la diferencia con la posición anterior
-                servoB.move_servo(0);  // Mover servo B
+                servoB.move_servo(0*ANGLE_MOTOR);  // Mover servo B
             } 
-            else if (strcmp(message_copy, "MOVE_SERVO_OFF1") == 0) {
-                servoB.move_servo(50);
-            }                        
-            else if (strcmp(message_copy, "MOVE_SERVO_ON2") == 0) {
+            else if (message&MOTOR_2) {
                 servoA_input = 2;
-                servoA.move_servo(45);
+                servoA.move_servo((servoA_input-1)*ANGLE_MOTOR);
                 vTaskDelay(calculate_delay(servoA_input, previous_position) / portTICK_PERIOD_MS);  // Espera según la diferencia con la posición anterior
                 servoB.move_servo(0);
             }            
-            else if (strcmp(message_copy, "MOVE_SERVO_OFF2") == 0) {
-                servoB.move_servo(50);
-            } 
-            else if (strcmp(message_copy, "MOVE_SERVO_ON3") == 0) {
+            else if (message&MOTOR_3) {
                 servoA_input = 3;
-                servoA.move_servo(90);
+                servoA.move_servo((servoA_input-1)*ANGLE_MOTOR);
                 vTaskDelay(calculate_delay(servoA_input, previous_position) / portTICK_PERIOD_MS);  // Espera según la diferencia con la posición anterior
                 servoB.move_servo(0);
             }             
-            else if (strcmp(message_copy, "MOVE_SERVO_OFF3") == 0) {
-                servoB.move_servo(50);
-            }  
-            else if (strcmp(message_copy, "MOVE_SERVO_ON4") == 0) {
+            else if (message&MOTOR_4) {
                 servoA_input = 4;
-                servoA.move_servo(135);
+                servoA.move_servo((servoA_input-1)*ANGLE_MOTOR);
                 vTaskDelay(calculate_delay(servoA_input, previous_position) / portTICK_PERIOD_MS);  // Espera según la diferencia con la posición anterior
                 servoB.move_servo(0);
             }  
-            else if (strcmp(message_copy, "MOVE_SERVO_OFF4") == 0) {
-                servoB.move_servo(50);
-            }  
-            else if (strcmp(message_copy, "MOVE_SERVO_ON5") == 0) {
+            else if (message&MOTOR_5) {
                 servoA_input = 5;
-                servoA.move_servo(180);
+                servoA.move_servo((servoA_input-1)*ANGLE_MOTOR);
                 vTaskDelay(calculate_delay(servoA_input, previous_position) / portTICK_PERIOD_MS);  // Espera según la diferencia con la posición anterior
                 servoB.move_servo(0);
             }  
-            else if (strcmp(message_copy, "MOVE_SERVO_OFF5") == 0) {
-                servoB.move_servo(20);
-            }  
-            else if (strcmp(message_copy, "MOVE_SERVO_ON6") == 0) {
+            else if (message&MOTOR_6) {
                 servoA_input = 6;
-                servoA.move_servo(84);
+                servoA.move_servo((servoA_input-1)*ANGLE_MOTOR);
                 vTaskDelay(calculate_delay(servoA_input, previous_position) / portTICK_PERIOD_MS);  // Espera según la diferencia con la posición anterior
                 servoB.move_servo(0);
             }  
-            else if (strcmp(message_copy, "MOVE_SERVO_OFF6") == 0) {
-                servoB.move_servo(20);
-            }  
-            else if (strcmp(message_copy, "MOVE_SERVO_ON7") == 0) {
+            else if (message&MOTOR_7) {
                 servoA_input = 7;
-                servoA.move_servo(100);
+                servoA.move_servo((servoA_input-1)*ANGLE_MOTOR);
                 vTaskDelay(calculate_delay(servoA_input, previous_position) / portTICK_PERIOD_MS);  // Espera según la diferencia con la posición anterior
                 servoB.move_servo(0);
             }  
-            else if (strcmp(message_copy, "MOVE_SERVO_OFF7") == 0) {
-                servoB.move_servo(20);
-            }  
-            else if (strcmp(message_copy, "MOVE_SERVO_ON8") == 0) {
+            else if (message&MOTOR_8) {
                 servoA_input = 8;
-                servoA.move_servo(115);
+                servoA.move_servo((servoA_input-1)*ANGLE_MOTOR);
                 vTaskDelay(calculate_delay(servoA_input, previous_position) / portTICK_PERIOD_MS);  // Espera según la diferencia con la posición anterior
                 servoB.move_servo(0);
             }  
-            else if (strcmp(message_copy, "MOVE_SERVO_OFF8") == 0) {
-                servoB.move_servo(20);
+            else if (message==0) {
+                servoB.move_servo(50);
             }
             else{ 
-                ESP_LOGE(TAG, "ERROR: no hay actuacion para el mensaje: %s", message_copy);
+                ESP_LOGE(TAG, "ERROR: no hay actuacion para el mensaje: %d", message);
             }
             previous_position = servoA_input;  // Actualizar la posición anterior
         }
