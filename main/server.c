@@ -68,7 +68,9 @@ Button buttons[] = {
     {"#4CAF50", "Sacar Tarjeta 5", "Pasar Tarjeta 5", "OFF"},
     {"#4CAF50", "Sacar Tarjeta 6", "Pasar Tarjeta 6", "OFF"},
     {"#4CAF50", "Sacar Tarjeta 7", "Pasar Tarjeta 7", "OFF"},
-    {"#4CAF50", "Sacar Tarjeta 8", "Pasar Tarjeta 8", "OFF"}
+    {"#4CAF50", "Sacar Tarjeta 8", "Pasar Tarjeta 8", "OFF"},
+    {"#4CAF50", "Sacar Tarjeta 9", "Pasar Tarjeta 9", "OFF"},
+    {"#4CAF50", "Sacar Tarjeta 10", "Pasar Tarjeta 10", "OFF"}
 };
 
 #define NUM_BUTTONS (sizeof(buttons) / sizeof(buttons[0]))
@@ -189,6 +191,14 @@ esp_err_t refresh_web(httpd_req_t *req, bool no_actualizar, int indice){
         "            <!-- Botón 2 que envía 'boton=1' al servidor -->"
         "            <button name=\"boton8\" value=\"%s\" style=\"background-color:%s;\">%s</button>"
         "        </form>"
+        "        <form action=\"/InterfaceControl\" method=\"GET\">"
+        "            <!-- Botón 2 que envía 'boton=1' al servidor -->"
+        "            <button name=\"boton9\" value=\"%s\" style=\"background-color:%s;\">%s</button>"
+        "        </form>"        
+        "        <form action=\"/InterfaceControl\" method=\"GET\">"
+        "            <!-- Botón 2 que envía 'boton=1' al servidor -->"
+        "            <button name=\"boton10\" value=\"%s\" style=\"background-color:%s;\">%s</button>"
+        "        </form>"
         "    </div>"
         "</body>"
         "</html>",
@@ -200,7 +210,9 @@ esp_err_t refresh_web(httpd_req_t *req, bool no_actualizar, int indice){
         button_next_state[4], button_color[4], button_texts[4], 
         button_next_state[5], button_color[5], button_texts[5],
         button_next_state[6], button_color[6], button_texts[6], 
-        button_next_state[7], button_color[7], button_texts[7]);
+        button_next_state[7], button_color[7], button_texts[7], 
+        button_next_state[8], button_color[8], button_texts[8],
+        button_next_state[9], button_color[9], button_texts[9]);
     
     valor = 0;
     if (!no_actualizar){
