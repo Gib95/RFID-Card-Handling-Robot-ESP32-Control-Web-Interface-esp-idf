@@ -38,12 +38,12 @@ public:
     void move_servo(int angle);
     void init_servo_pwm(int gpio);
     void setSpeed(int _speed);
+    int speed = 0;
 
 private:
     void move_to_target_angle(int angle);
     uint32_t angle_to_compare(int angle);
     int last_position = 0;
-    int speed = 10;
     // Miembro privado: el comparador que usaremos en el PWM
     mcpwm_cmpr_handle_t comparator;
     const char* TAG = "";
