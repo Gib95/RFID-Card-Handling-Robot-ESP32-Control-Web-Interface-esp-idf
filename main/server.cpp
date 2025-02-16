@@ -41,7 +41,7 @@ QueueHandle_t message_queue = NULL;  // Definición de la variable
 #define MODO_AUTOMATICO_ON_STR  "Modo Automatico, la tarjeta pasa y sale sola"
 #define MODO_AUTOMATICO_OFF_STR "Modo Manual, la tarjeta tiene que pasarse y sacarse manualmente"
 #define BACKGROUND_MANUAL       "linear-gradient(135deg, #f1f2f6, #dfe6e9);"
-#define BACKGROUND_AUTOMATIC    "linear-gradient(135deg,rgba(115, 187, 255, 0.56),rgba(14, 241, 241, 0.6));"
+#define BACKGROUND_AUTOMATIC    "linear-gradient(135deg,rgba(115, 187, 255, 0.8),rgba(14, 241, 241, 0.75));"
 
 std::string message = MESSAGE;
 std::string messageVelocity = VELOCIDAD_MENSAJE;

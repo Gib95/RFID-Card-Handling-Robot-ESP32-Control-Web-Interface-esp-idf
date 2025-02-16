@@ -4,6 +4,6 @@ idf_build_get_property(target IDF_TARGET)
 if(${target} STREQUAL "linux")
     list(APPEND requires esp_stubs esp-tls esp_http_server protocol_examples_common nvs_flash)
 endif()
-idf_component_register(SRCS  "main.cpp" "server.cpp" "servoMotor.cpp" "URIHandler.cpp"
+idf_component_register(SRCS  "main.cpp" "server.cpp" "servoMotor.cpp"
                     INCLUDE_DIRS "."
                     REQUIRES ${requires})
