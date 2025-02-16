@@ -219,25 +219,20 @@ void update_button_state(std::string param, int index) {
 }
 
 static esp_err_t get_key_value(httpd_req_t *req, std::string &key, std::string &value) {
-    // Buscar el inicio del query
     std::string uri(req->uri);
     size_t query_pos = uri.find('?');
     if (query_pos != std::string::npos) {
-        // Obtener solo la parte del query string
         std::string query = uri.substr(query_pos + 1);
 
-        // Crear un stream para dividir el query en parámetros
         std::stringstream query_stream(query);
         std::string param;
 
-        // Recorrer cada parámetro separado por '&'
         while (std::getline(query_stream, param, '&')) {
             size_t equal_pos = param.find('=');
             if (equal_pos != std::string::npos) {
                 // Separar key y value
                 key = param.substr(0, equal_pos);
                 value = param.substr(equal_pos + 1);
-
                 ESP_LOGI("Query", "Variable: %s, Valor: %s", key.c_str(), value.c_str());
             }
         }
@@ -258,7 +253,7 @@ int control_botones(const std::string& param, int numero_boton) {
             if (button_state[j] == "ON") {
                 message = ERROR_MESSAGE;
                 message_color = "color: red;";
-                return 0;
+                return 1;
             }
         }
     }
@@ -310,8 +305,9 @@ static esp_err_t any_handler(httpd_req_t *req) {
     if (numclave!=-1){
         if (claveFiltro == "boton") {
             if ((valor == "ON") || (valor == "OFF")){
-                move = true;
-                control_botones(valor, numclave - 1);
+                if(control_botones(valor, numclave - 1)==0){
+                    move = true;
+                };
             }
             else{
                 ESP_LOGE(HTTPServer, " el parametro no es valido => %s", valor.c_str());
@@ -356,10 +352,10 @@ static esp_err_t any_handler(httpd_req_t *req) {
             ESP_LOGI(HTTPServer, "MASCARA 2 BYTES CON BIT MAS SIGNIFICATIVO A 1 %d", parametro_velocidad);
             parametro_velocidad += static_cast<uint16_t>(std::stoi(valor));
             ESP_LOGI(HTTPServer, "suma de la velocidad de entrada %d", parametro_velocidad);
-            message = valor + " Velocidad de retardo seteada a %s", valor;
-            message_color = "color: yellow;";
+            message = " Velocidad de retardo seteada a " + valor;
+            message_color = "color: rgb(145, 146, 53);";
             servo_http_handler(parametro_velocidad);
-            return ESP_OK;
+            // return ESP_OK;
         }
         else{
             ESP_LOGE(HTTPServer, " el parametro tiene que tener un numero => %s", claveFiltro.c_str());
@@ -381,8 +377,6 @@ static const httpd_uri_t Interface = {
     .uri       = "/InterfaceControl",
     .method    = HTTP_GET,
     .handler   = any_handler,
-    /* Let's pass response string in user
-     * context to demonstrate it's usage */
     .user_ctx  = NULL
 };
 
@@ -390,8 +384,6 @@ static const httpd_uri_t index_ = {
     .uri       = "/",
     .method    = HTTP_GET,
     .handler   = any_handler,
-    /* Let's pass response string in user
-     * context to demonstrate it's usage */
     .user_ctx  = NULL
 };
 
