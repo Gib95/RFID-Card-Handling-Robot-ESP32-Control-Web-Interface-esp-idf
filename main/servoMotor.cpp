@@ -133,7 +133,7 @@ int calculate_delay(int current_position, int previous_position) {
     ESP_LOGI(TAG, "calculate_delay");
     int difference = abs(current_position - previous_position);
         if (difference == 8) {
-        return 700; // 700 ms para la máxima diferencia
+        return 800; // 700 ms para la máxima diferencia
     }
     else if (difference == 1) {
         return 100; // 100 ms para la mínima diferencia
@@ -150,8 +150,11 @@ void move_servo_task(void *pvParameters) {
     ESP_LOGW(TAG, "move_servo_task alive");
     int servoA_input = 0;
     int previous_position = 0;
+    bool automatic_mode = false;
     while (1) {      
         if (xQueueReceive(message_queue, &message, portMAX_DELAY) == pdPASS) {
+            ESP_LOGI(TAG, "MODO AUTOMATICO A %d", automatic_mode);
+
             ESP_LOGW(TAG, "Mensaje recibido: %d", message);
             auto it = motorMap.find(message);      
             if (it != motorMap.end()) {
@@ -166,6 +169,10 @@ void move_servo_task(void *pvParameters) {
                     vTaskDelay(calculate_delay(servoA_input, previous_position) / portTICK_PERIOD_MS); 
                     previous_position = servoA_input;
                     servoB.move_servo(POSICION_ON);
+                    if(automatic_mode){
+                        vTaskDelay(500 / portTICK_PERIOD_MS); 
+                        servoB.move_servo(POSICION_OFF);
+                    }
                 }
             }
             else {
@@ -174,6 +181,16 @@ void move_servo_task(void *pvParameters) {
                     servoA.speed = velocidad;
                     servoB.speed = velocidad;
                     ESP_LOGW(TAG, "Velocidad de retardo actualizada a %d", velocidad);
+                }
+                else if(message == 0x00FF){
+                    uint8_t velocidad = message & 0x00FF;  
+
+                    automatic_mode = true;
+                    ESP_LOGE(TAG, "automatic_mode: %d", automatic_mode);
+                }
+                else if(message == 0x00FE){
+                    automatic_mode = false;
+                    ESP_LOGE(TAG, "automatic_mode: %d", automatic_mode);
                 }
                 else{
                     ESP_LOGE(TAG, "ERROR: no hay actuacion para el mensaje: %d", message);
