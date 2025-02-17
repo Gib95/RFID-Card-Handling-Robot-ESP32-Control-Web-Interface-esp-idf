@@ -6,15 +6,12 @@
    software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
    CONDITIONS OF ANY KIND, either express or implied.
 */
-
-#include <string>
+#include <charconv>  // Para std::from_chars
 #include <sstream>
 #include <iostream>
-#include <charconv>  // Para std::from_chars
 #include "nvs_flash.h"
 #include "nvs.h"
 #include "nvs_handle.hpp"
-#include <algorithm>  // Para std::transform
 
 #include "server.h"
 #include "esp_mac.h"
@@ -29,25 +26,39 @@ QueueHandle_t message_queue = NULL;  // Definición de la variable
 
 #define MemoryKeyModoAutomatico "modoautomatico"
 
-#define MemoryKeyBoton           "boton"
+#define MemoryKeyBoton           "boton%d"
 #define MemoryKeyVelocidad       "velocidad"
-#define MemoryKeyTextButtonONOFF "nombreboton"
-#define MemoryKeyTextButtonON    "nombreonboton"
-#define MemoryKeyTextButtonOFF   "nombreoffboton"
+#define MemoryKeyTextButtonONOFF "nombreboton%d"
+#define MemoryKeyTextButtonON    "nombreonboton%d"
+#define MemoryKeyTextButtonOFF   "nombreoffboton%d"
+
+#define MemoryQueryBoton           "boton"
+#define MemoryQueryVelocidad       "velocidad"
+#define MemoryQueryTextButtonONOFF "nombreboton"
+#define MemoryQueryTextButtonON    "nombreonboton"
+#define MemoryQueryTextButtonOFF   "nombreoffboton"
+
 
 #define MODO_AUTOMATICO_ON 0x00FF
 #define MODO_AUTOMATICO_OFF 0x00FE
-#define VELOCIDAD_MENSAJE       "Velocidad retardo seteada a "
+#define VELOCIDAD_MENSAJE       "Velocidad retardo seteada a %d"
 #define MODO_AUTOMATICO_ON_STR  "Modo Automatico, la tarjeta pasa y sale sola"
 #define MODO_AUTOMATICO_OFF_STR "Modo Manual, la tarjeta tiene que pasarse y sacarse manualmente"
 #define BACKGROUND_MANUAL       "linear-gradient(135deg, #f1f2f6, #dfe6e9);"
-#define BACKGROUND_AUTOMATIC    "linear-gradient(135deg,rgba(115, 187, 255, 0.8),rgba(14, 241, 241, 0.75));"
+#define BACKGROUND_AUTOMATIC    "linear-gradient(135deg,rgba(255, 223, 193, 0.72),rgb(252, 245, 182));"
 
-std::string message = MESSAGE;
-std::string messageVelocity = VELOCIDAD_MENSAJE;
-std::string messageMode = MODO_AUTOMATICO_OFF_STR;
-std::string message_color = "color: green;";
-std::string background_color =  BACKGROUND_MANUAL;
+
+#define MAX_LENGTH_VALUE 64
+#define MAX_BACKGROUND_VALUE 128
+#define MAX_QUERY_VALUE 16
+
+
+
+char message[MAX_LENGTH_VALUE] = "Velocidad retardo seteada a %d"; // Aquí es donde se copia el literal
+char messageVelocity[MAX_LENGTH_VALUE] = "Velocidad retardo seteada a %d";
+char messageMode[MAX_LENGTH_VALUE] = MODO_AUTOMATICO_OFF_STR;
+char message_color[MAX_LENGTH_VALUE] = "color: green;";
+char background_color[MAX_BACKGROUND_VALUE] =  BACKGROUND_MANUAL;
 /* A simple example that demonstrates how to create GET and POST
  * handlers for the web server.
  */
@@ -55,10 +66,10 @@ const char* HTTPServer = "HTTPServer";
 bool automaticMode = false;
 
 typedef struct {
-    std::string color;           
-    std::string label_off;     
-    std::string label_on;      
-    std::string state;        
+    char color[20];           
+    char label_off[MAX_LENGTH_VALUE];     
+    char label_on[MAX_LENGTH_VALUE];      
+    char state[5];        
 } Button;
 Button buttons[] = {
     {"#4CAF50", "Sacar Tarjeta 1", "Pasar Tarjeta 1", "OFF"},
@@ -105,17 +116,17 @@ const uint16_t motorBits[] = {
 
 #define NUM_BUTTONS (sizeof(buttons) / sizeof(buttons[0]))
 
-std::string button_texts[NUM_BUTTONS];
-std::string button_color[NUM_BUTTONS];
-std::string button_state[NUM_BUTTONS];
-std::string button_next_state[NUM_BUTTONS];
+char button_texts[NUM_BUTTONS][MAX_LENGTH_VALUE];  // Cambié a un arreglo de 2 dimensiones
+char button_color[NUM_BUTTONS][MAX_LENGTH_VALUE];
+char button_state[NUM_BUTTONS][MAX_LENGTH_VALUE];
+char button_next_state[NUM_BUTTONS][MAX_LENGTH_VALUE];
 
 
-void save_button_name(std::string buttonKey, const std::string button_name) {
+void save_button_name(char * buttonKey, char * button_name) {
     esp_err_t err;
     std::unique_ptr<nvs::NVSHandle> handle = nvs::open_nvs_handle("storage", NVS_READWRITE, &err);
-    ESP_LOGW(HTTPServer, "Escribiendo valor para clave %s", button_name.c_str());
-    err = handle->set_string(buttonKey.c_str(), button_name.c_str());
+    ESP_LOGW(HTTPServer, "Escribiendo valor para clave %s", button_name);
+    err = handle->set_string(buttonKey, button_name);
     printf((err != ESP_OK) ? "Failed!\n" : "Done\n");
 
     // Commit written value.
@@ -129,11 +140,11 @@ void save_button_name(std::string buttonKey, const std::string button_name) {
     fflush(stdout);
 }
 
-void save_int_value(const std::string valueKey, uint16_t value) {
+void save_int_value(char * valueKey, uint16_t value) {
     esp_err_t err;
     std::unique_ptr<nvs::NVSHandle> handle = nvs::open_nvs_handle("storage", NVS_READWRITE, &err);
     ESP_LOGW(HTTPServer, "Escribiendo valor para clave %d", value);
-    err = handle->set_item(valueKey.c_str(), value);
+    err = handle->set_item(valueKey, value);
     printf((err != ESP_OK) ? "Failed!\n" : "Done\n");
 
     // Commit written value.
@@ -147,12 +158,12 @@ void save_int_value(const std::string valueKey, uint16_t value) {
     fflush(stdout);
 }
 
-int load_button_name(const std::string button_name, std::string &button_name_found) {
+int load_button_name(char* button_name, char * button_name_found) {
 
     esp_err_t err;
     printf("\n");
     printf("Opening Non-Volatile Storage (NVS) handle... ");
-    printf("Buscando valor para clave %s", button_name.c_str());
+    printf("Buscando valor para clave %s", button_name);
     // Handle will automatically close when going out of scope or when it's reset.
     std::unique_ptr<nvs::NVSHandle> handle = nvs::open_nvs_handle("storage", NVS_READWRITE, &err);
     if (err != ESP_OK) {
@@ -160,37 +171,32 @@ int load_button_name(const std::string button_name, std::string &button_name_fou
     } else {
         printf("Done\n");
 
-        char _button_name_found[64];
-        const char* button_name_cstr = button_name.c_str();
-        size_t len = sizeof(_button_name_found);
-        
         // Obtén la cadena del NVS
-        err = handle->get_string(button_name_cstr, _button_name_found, len);
+        err = handle->get_string(button_name, button_name_found, MAX_LENGTH_VALUE);
         switch (err) {
             case ESP_OK:
                 printf("Done\n");
-                ESP_LOGI(HTTPServer, "button_name_found = %s", _button_name_found);
-                button_name_found =_button_name_found;
+                ESP_LOGI(HTTPServer, "button_name_found = %s", button_name_found);
                 return 0;
             case ESP_ERR_NVS_NOT_FOUND:
                 ESP_LOGW(HTTPServer, "The value is not initialized yet!");
-                button_name_found = "error";
+                strcpy(button_name_found,"error");
                 return -1;
             default :
                 ESP_LOGE(HTTPServer, "Error (%s) reading!", esp_err_to_name(err));
-                button_name_found = "error";
+                strcpy(button_name_found,"error");
                 return -1;
             }
     }
     return -1;
 }
 
-int load_int_value(const std::string valueKey, uint16_t &value) {
+int load_int_value(char * valueKey, uint16_t &value) {
 
     esp_err_t err;
     printf("\n");
     printf("Opening Non-Volatile Storage (NVS) handle... ");
-    printf("Buscando valor para clave %s", valueKey.c_str());
+    printf("Buscando valor para clave %s", valueKey);
     // Handle will automatically close when going out of scope or when it's reset.
     std::unique_ptr<nvs::NVSHandle> handle = nvs::open_nvs_handle("storage", NVS_READWRITE, &err);
     if (err != ESP_OK) {
@@ -199,7 +205,7 @@ int load_int_value(const std::string valueKey, uint16_t &value) {
         printf("Done\n");
      
         // Obtén la cadena del NVS
-        err = handle->get_item(valueKey.c_str(), value);
+        err = handle->get_item(valueKey, value);
         switch (err) {
             case ESP_OK:
                 printf("Done\n");
@@ -304,7 +310,7 @@ esp_err_t refresh_web(httpd_req_t *req, int indice, bool move){
         "    <p>%s</p>"
         "    <p>%s</p>"
         "    <p>%s</p>"
-        "    <div class=\"button-container\">", background_color.c_str(), message_color.c_str(), messageMode.c_str(), messageVelocity.c_str(), message.c_str());
+        "    <div class=\"button-container\">", background_color, message_color, messageMode, messageVelocity, message);
 
     // Generación de los botones de manera dinámica
     for (int i = 0; i < NUM_BUTTONS; i++) {
@@ -312,7 +318,7 @@ esp_err_t refresh_web(httpd_req_t *req, int indice, bool move){
             "        <form action=\"/InterfaceControl\" method=\"GET\">"
             "            <button name=\"boton%d\" value=\"%s\" style=\"background-color:%s;\">%s</button>"
             "        </form>", 
-            i + 1, button_next_state[i].c_str(), button_color[i].c_str(), button_texts[i].c_str());
+            i + 1, button_next_state[i], button_color[i], button_texts[i]);
     }
 
     snprintf(response + offset, sizeof(response) - offset,  // Cierre del HTML
@@ -321,11 +327,11 @@ esp_err_t refresh_web(httpd_req_t *req, int indice, bool move){
         "</html>");
     
     valor = 0;
-    if (button_next_state[indice] == "ON"){
-        button_state[indice] ="OFF";
+    if (strcmp(button_next_state[indice], "ON") == 0){
+        strcpy(button_state[indice],"OFF");
     }
     else{
-        button_state[indice] ="ON";
+        strcpy(button_state[indice],"ON");
         valor = indice+1;
     }
     if (move){
@@ -337,266 +343,322 @@ esp_err_t refresh_web(httpd_req_t *req, int indice, bool move){
     return ESP_OK;
 }
 
-void update_button_state(std::string param, int index) {
-    ESP_LOGW(HTTPServer, "update_button_state , param %s indice %d", param.c_str(), index);
-    if (param == "ON") {
-        button_texts[index] = buttons[index].label_off;
-        button_color[index] = "rgb(69, 157, 160)";
-        button_next_state[index] = "OFF";
+void update_button_state(char * param, int index) {
+    // ESP_LOGW(HTTPServer, "update_button_state , param %s indice %d", param, index);
+    
+    if (strcmp(param, "ON") == 0) {
+        // Asignamos valores a los arreglos de char[] usando strcpy
+        strcpy(button_texts[index], buttons[index].label_off);
+        strcpy(button_color[index], "rgb(69, 157, 160)");
+        strcpy(button_next_state[index], "OFF");
     } else {
-        button_texts[index] = buttons[index].label_on;
-        button_color[index] = "#45a049";
-        button_next_state[index] = "ON";
+        strcpy(button_texts[index], buttons[index].label_on);
+        strcpy(button_color[index], "#45a049");
+        strcpy(button_next_state[index], "ON");
     }
 }
 
-static esp_err_t get_key_value(httpd_req_t *req, std::string &key, std::string &value) {
-    std::string uri(req->uri);
-    size_t query_pos = uri.find('?');
-    if (query_pos != std::string::npos) {
-        std::string query = uri.substr(query_pos + 1);
+static esp_err_t get_key_value(httpd_req_t *req, char *key, char *value) {
+    // Obtener la URI del request
+    const char *uri = req->uri;
 
-        std::stringstream query_stream(query);
-        std::string param;
+    // Buscar el carácter '?' que marca el comienzo de los parámetros en la URI
+    char *query_pos = strchr(uri, '?');
+    if (query_pos != nullptr) {
+        // El primer parámetro comienza justo después del '?'
+        query_pos++;  // Avanzamos un caracter para saltarnos el '?'
 
-        while (std::getline(query_stream, param, '&')) {
-            size_t equal_pos = param.find('=');
-            if (equal_pos != std::string::npos) {
-                // Separar key y value
-                key = param.substr(0, equal_pos);
-                value = param.substr(equal_pos + 1);
-                ESP_LOGI("Query", "Variable: %s, Valor: %s", key.c_str(), value.c_str());
+        // Usamos strtok para separar los parámetros por '&'
+        char *param = strtok(query_pos, "&");
+        
+        while (param != nullptr) {
+            // Buscamos el signo '=' que separa la clave y el valor
+            char *equal_pos = strchr(param, '=');
+            if (equal_pos != nullptr) {
+                // Separamos la clave y el valor
+                *equal_pos = '\0';  // Terminamos la clave con '\0'
+                strcpy(key, param);  // Copiamos la clave al argumento 'key'
+                strcpy(value, equal_pos + 1);  // Copiamos el valor al argumento 'value'
+                
+                ESP_LOGI("Query", "Variable: %s, Valor: %s", key, value);
             }
+            // Continuamos con el siguiente parámetro
+            param = strtok(nullptr, "&");
         }
     }
+
     return ESP_OK;
 }
 
-int control_botones(const std::string& param, int numero_boton) {
+int control_botones(char * param, int numero_boton) {
     ESP_LOGI(HTTPServer, "obtener_numero_boton = %d", numero_boton + 1);
-    ESP_LOGI(HTTPServer, "boton%d state %s", numero_boton + 1 , button_state[numero_boton].c_str());
-    message_color = "color: green;";
-    message = MESSAGE;
+    ESP_LOGI(HTTPServer, "boton%d state %s", numero_boton + 1 , button_state[numero_boton]);
+    sprintf(message, MESSAGE);
+    sprintf(message_color, "color: green;");
     if(!automaticMode){
-        if (param == "ON") {
+        if (strcmp(param,"ON")==0) {
             // Verificar si ya hay un botón encendido
             for (int j = 0; j < NUM_BUTTONS; j++) {
                 if (j == numero_boton) continue;  // Si es el mismo botón, no hacer nada
-                if (button_state[j] == "ON") {
-                    message = ERROR_MESSAGE;
-                    message_color = "color: red;";
+                if (strcmp(button_state[j], "ON")==0) {
+                    sprintf(message, ERROR_MESSAGE);
+                    sprintf(message_color, "color: red;");
                     return 1;
                 }
             }
         }
     }
 
-    update_button_state(param.c_str(), numero_boton);  // Necesitamos pasarlo como C string
+    update_button_state(param, numero_boton);  // Necesitamos pasarlo como C string
     return 0;
 }
 
+// Función para verificar si un carácter es un dígito
 int es_digito(char c) {
     return c >= '0' && c <= '9';
 }
 
-void url_decode(std::string& str) {
-    std::string result;
-    for (size_t i = 0; i < str.length(); ++i) {
-        if (str[i] == '%' && i + 2 < str.length()) {
-            // Convertir caracteres hexadecimales a ASCII
-            char hex[3] = { str[i + 1], str[i + 2], '\0' };
-            result += static_cast<char>(std::strtol(hex, nullptr, 16));
-            i += 2; // Saltar los dos caracteres hexadecimales
+// Función para realizar el decodificado de una URL (usando char*)
+void url_decode(char* str) {
+    char result[1024];  // Usamos un buffer para almacenar el resultado
+    int j = 0;  // Índice para el resultado
+    
+    for (int i = 0; str[i] != '\0'; ++i) {
+        if (str[i] == '%' && str[i+1] != '\0' && str[i+2] != '\0') {
+            // Convertir los dos siguientes caracteres hexadecimales a ASCII
+            char hex[3] = {str[i+1], str[i+2], '\0'};
+            result[j++] = static_cast<char>(std::strtol(hex, nullptr, 16));
+            i += 2;  // Saltamos los dos caracteres hexadecimales
         } else if (str[i] == '+') {
-            // Los espacios son codificados como '+'
-            result += ' ';
+            result[j++] = ' ';  // Convertimos '+' en espacio
         } else {
-            result += str[i];  // Caracter normal
+            result[j++] = str[i];  // Caracter normal
         }
     }
-    str = result;
-} 
+    
+    result[j] = '\0';  // Añadimos el terminador de cadena
+    strcpy(str, result);  // Copiamos el resultado decodificado de vuelta en str
+}
 
-void obtenerPalabraYNumero(const std::string& str, std::string& palabra, int & numero) {
-    // Buscar el último dígito que comienza un número
-    size_t num_pos = str.find_last_of("0123456789");
-
-    if (num_pos == std::string::npos) {
-        palabra = str;
-        numero = -1;
+// Función para separar la palabra y el número en una cadena (usando char*)
+void obtenerPalabraYNumero(char* str, char* palabra, int &numero) {
+    int num_pos = -1;
+    
+    // Buscamos el último dígito que podría comenzar un número
+    for (int i = 0; str[i] != '\0'; ++i) {
+        if (es_digito(str[i])) {
+            num_pos = i;
+            break;  // Encontramos el primer dígito, no seguimos buscando
+        }
+    }
+    
+    if (num_pos == -1) {
+        // No se encuentra un número, así que toda la cadena es la palabra
+        strcpy(palabra, str);
+        numero = -1;  // Indicamos que no se encontró un número
         return;
     }
 
-    size_t start_pos = num_pos;
-    while (start_pos > 0 && (isdigit(str[start_pos - 1]) || str[start_pos - 1] == '.')) {
-        --start_pos;
+    // Extraemos la parte de la palabra antes del número
+    strncpy(palabra, str, num_pos);
+    palabra[num_pos] = '\0';  // Terminamos la palabra con '\0'
+    
+    // Ahora extraemos el número (max 2 dígitos)
+    char num_str[3];  // Sólo necesitamos dos caracteres + el '\0'
+    int i = 0;
+    
+    // Copiamos los primeros dos dígitos
+    for (int j = num_pos; str[j] != '\0' && i < 2; ++j, ++i) {
+        num_str[i] = str[j];
     }
+    num_str[i] = '\0';  // Terminamos la cadena numérica
 
-    palabra = str.substr(0, start_pos);
-
-    std::string num_str = str.substr(start_pos);
-
-    auto [ptr, ec] = std::from_chars(num_str.data(), num_str.data() + num_str.size(), numero);
-    if (ec != std::errc()) {
-        numero = -1;
+    // Convertimos el número en la cadena numérica (solo dos dígitos)
+    if (sscanf(num_str, "%d", &numero) != 1) {
+        numero = -1;  // Si no es un número válido
     }
 }
 
-void convertirAMinusculas(std::string &str) {
-    std::transform(str.begin(), str.end(), str.begin(), ::tolower);
+// Función para convertir una cadena en minúsculas (usando char*)
+void convertirAMinusculas(char* str) {
+    for (int i = 0; str[i] != '\0'; ++i) {
+        str[i] = static_cast<char>(tolower(str[i]));
+    }
 }
 
-bool contieneSoloNumerosYCaracteres(const std::string& str) {
-    // Recorremos el string y verificamos que no tenga letras
-    for (char c : str) {
-        if (std::isalpha(c)) {  // Si es una letra
-            return false;  // No es permitido
+// Función para verificar si una cadena contiene solo números y caracteres alfanuméricos (sin letras)
+bool contieneSoloNumerosYCaracteres(char* str) {
+    for (int i = 0; str[i] != '\0'; ++i) {
+        if (isalpha(str[i])) {  // Si es una letra, no es válido
+            return false;
         }
-        if (!std::isalnum(c)) {  // Si no es alfanumérico
-            return false;  // No es permitido
+        if (!isalnum(str[i])) {  // Si no es alfanumérico, no es válido
+            return false;
         }
     }
-    return true;  // Solo tiene caracteres alfanuméricos y no tiene letras
+    return true;
 }
+
+
+// Función auxiliar para asignar el mensaje y el color
+void set_message(char* msg, char* color) {
+    strcpy(message, msg);
+    strcpy(message_color, color);
+    ESP_LOGW(HTTPServer, "%s", message);
+}
+
+// Función para actualizar las etiquetas del botón
+void update_button_label(int numclave, char* label, bool is_on) {
+    char num_clave_str[MAX_LENGTH_VALUE];
+    sprintf(num_clave_str, "%d", numclave);
+
+    if (is_on) {
+        strcpy(buttons[numclave - 1].label_on, label);
+        strcpy(button_texts[numclave - 1], label);
+        ESP_LOGW(HTTPServer, "Nombre ON del boton %d cambiado a => %s", numclave, label);
+    } else {
+        strcpy(buttons[numclave - 1].label_off, label);
+        strcpy(button_texts[numclave - 1], label);
+        ESP_LOGW(HTTPServer, "Nombre OFF del boton %d cambiado a => %s", numclave, label);
+    }
+    
+    char ButtonKey[MAX_LENGTH_VALUE];
+    sprintf(ButtonKey, "%s%d", is_on ? MemoryKeyTextButtonON : MemoryKeyTextButtonOFF, numclave);
+    save_button_name(ButtonKey, label);
+}
+
+// Función genérica para manejar cambios de parámetros
+void handle_key_value_change(char* claveFiltro, char* valor, int numclave, bool &move) {
+   
+    if (strcmp(claveFiltro, MemoryQueryBoton) == 0) {
+        if (strcmp(valor, "ON") == 0 || strcmp(valor, "OFF") == 0) {
+            if (control_botones(valor, numclave - 1) == 0) {
+                move = true;
+            }
+        } else {
+            ESP_LOGE(HTTPServer, "El parametro no es valido => %s", valor);
+            set_message(valor, "color: red;");
+        }
+    }
+    else if (strcmp(claveFiltro, MemoryQueryTextButtonON) == 0) {
+        update_button_label(numclave, valor, true);
+        sprintf(message, "Nombre de Pasar boton %d cambiado a Pasar %s", numclave, valor);
+        set_message(message, "color: green;");
+    } 
+    else if (strcmp(claveFiltro, MemoryQueryTextButtonOFF) == 0) {
+        update_button_label(numclave, valor, false);
+        sprintf(message, "Nombre de Sacar boton %d cambiado a Pasar %s", numclave, valor);
+        set_message(message, "color: green;");
+    } 
+    else if (strcmp(claveFiltro, MemoryQueryTextButtonONOFF) == 0) {
+        char full_label[MAX_LENGTH_VALUE];
+        sprintf(full_label, "Sacar %s", valor);
+        update_button_label(numclave, full_label, false);
+        sprintf(full_label, "Pasar %s", valor);
+        update_button_label(numclave, full_label, true);
+
+        sprintf(message, "Nombre del boton %d cambiado a %s", numclave, valor);
+        set_message(message, "color: green;");
+    } 
+    else {
+        ESP_LOGE(HTTPServer, "El parametro no es valido => %s", claveFiltro);
+        set_message(valor, "color: red;");
+    }
+}
+
+// Función genérica para manejar la velocidad
+void handle_velocity_change(char* valor) {
+    int numclave = 0;
+    char claveFiltro[MAX_LENGTH_VALUE] = {0};
+    obtenerPalabraYNumero(valor, claveFiltro, numclave);
+
+    if (contieneSoloNumerosYCaracteres(valor)) {
+        if (numclave != -1) {
+            uint16_t parametro_velocidad = 0;  
+            parametro_velocidad |= (1 << 15);  // Establece el bit más significativo a 1
+            parametro_velocidad += static_cast<uint16_t>(atoi(valor));
+            sprintf(messageVelocity, VELOCIDAD_MENSAJE, static_cast<uint16_t>(atoi(valor)));
+            save_int_value(MemoryKeyVelocidad, parametro_velocidad);
+            servo_http_handler(parametro_velocidad);
+            set_message(messageVelocity, "color: rgb(145, 146, 53);");
+        }
+    } else {
+        ESP_LOGE(HTTPServer, "El parametro tiene que ser un numero => %s", claveFiltro);
+        set_message(valor, "color: red;");
+    }
+}
+
+// Función genérica para manejar el modo automático
+void handle_automatic_mode_change(char* valor) {
+    if (strcmp(valor, "ON") == 0) {
+        save_int_value(MemoryKeyModoAutomatico, 1);
+        automaticMode = true;
+        servo_http_handler(MODO_AUTOMATICO_ON);
+        strcpy(messageMode, MODO_AUTOMATICO_ON_STR);
+        strcpy(background_color, BACKGROUND_AUTOMATIC);
+        set_message("En modo automatico", "color: green;");
+    }            
+    else if (strcmp(valor, "OFF") == 0) {
+        save_int_value(MemoryKeyModoAutomatico, 0);
+        automaticMode = false;
+        servo_http_handler(MODO_AUTOMATICO_OFF);
+        strcpy(messageMode, MODO_AUTOMATICO_OFF_STR);
+        strcpy(background_color, BACKGROUND_MANUAL);
+        set_message("Fuera de modo automatico", "color: green;");
+    }
+    else {
+        ESP_LOGE(HTTPServer, "El valor tiene que ser ON o OFF => %s", valor);
+        set_message(valor, "color: red;");
+    }
+}
+
 static esp_err_t any_handler(httpd_req_t *req) {
     ESP_LOGW(HTTPServer, "Found URL query => %s", req->uri);
     bool move = false;
-    std::string claveFiltro;
-    std::string clave;  
+    char claveFiltro[MAX_LENGTH_VALUE] = {0};
+    char clave[MAX_QUERY_VALUE] = {0};  
     int numclave = 0;
-    std::string valor; 
-    std::string ButtonKey = "";
-    background_color = BACKGROUND_MANUAL;
-    if(automaticMode){
-        background_color = BACKGROUND_AUTOMATIC;
+    char valor[MAX_QUERY_VALUE] = {0}; 
+    strcpy(background_color, BACKGROUND_MANUAL);
+
+    if(automaticMode) {
+        strcpy(background_color, BACKGROUND_AUTOMATIC);
     }
+
     get_key_value(req, clave, valor);
     url_decode(valor);
     obtenerPalabraYNumero(clave, claveFiltro, numclave);
+    ESP_LOGI(HTTPServer, "Palabra: %s, Número: %d", claveFiltro, numclave);
+
     convertirAMinusculas(clave);
     convertirAMinusculas(claveFiltro);
-    ESP_LOGW(HTTPServer, "claveFiltro => %s", claveFiltro.c_str());
-    if (numclave!=-1){
-        std::string num_clave_str = std::to_string(numclave);
-        if (claveFiltro == MemoryKeyBoton) {
-            if ((valor == "ON") || (valor == "OFF")){
-                if(control_botones(valor, numclave - 1)==0){
-                    move = true;
-                }
-            }
-            else{
-                ESP_LOGE(HTTPServer, " el parametro no es valido => %s", valor.c_str());
-                message_color = "color: red;";
-                message = valor + " no es un parametro valido";
-            }
-        }
+    ESP_LOGW(HTTPServer, "claveFiltro => %s", claveFiltro);
 
-        else if (claveFiltro == MemoryKeyTextButtonON)   {
-            buttons[numclave - 1].label_on = valor;
-            ESP_LOGW(HTTPServer, "nombre ON del boton%d cambiado a => %s", numclave, buttons[numclave - 1].label_on.c_str());
-            message = "Nombre de Pasar boton" + num_clave_str + " cambiado a Pasar " + valor;
-            ButtonKey = MemoryKeyTextButtonON +  num_clave_str;
-            save_button_name(ButtonKey, valor);
-            button_texts[numclave - 1] = valor;
-        } 
-        else if (claveFiltro == MemoryKeyTextButtonOFF) {
-            buttons[numclave - 1].label_off = valor;
-            ESP_LOGW(HTTPServer, "nombre OFF del boton%d cambiado a => %s", numclave, buttons[numclave - 1].label_off.c_str());
-            message = "Nombre de Sacar boton" + num_clave_str + " cambiado a Pasar " + valor;
-            ButtonKey = MemoryKeyTextButtonOFF + num_clave_str;
-            save_button_name(ButtonKey, valor);
-            button_texts[numclave - 1] = valor;
-        } 
-        else if (claveFiltro == MemoryKeyTextButtonONOFF) {
-            buttons[numclave - 1].label_off = "Sacar " + valor;
-            buttons[numclave - 1].label_on = "Pasar " + valor;
-            ESP_LOGW(HTTPServer, "nombre del boton%d off cambiado a => %s", numclave, buttons[numclave - 1].label_off.c_str());
-            ESP_LOGW(HTTPServer, "nombre del boton%d on cambiado a => %s", numclave, buttons[numclave - 1].label_on.c_str());
-            message = "Nombre del boton " + num_clave_str + " cambiado a " + valor;
-            ButtonKey = MemoryKeyTextButtonON + num_clave_str;
-            save_button_name(ButtonKey, buttons[numclave - 1].label_on);
-            ButtonKey = MemoryKeyTextButtonOFF + num_clave_str;
-            save_button_name(ButtonKey, buttons[numclave - 1].label_off);
-            button_texts[numclave - 1] = valor;
-        } 
-        else{
-            ESP_LOGE(HTTPServer, " el parametro no es valido => %s", claveFiltro.c_str());
-            message_color = "color: red;";
-            message = valor + " no es un parametro valido";
-            ESP_LOGW(HTTPServer, "%s", message.c_str());
-        }
-        
+    if (numclave != -1) {
+        handle_key_value_change(claveFiltro, valor, numclave, move);
     }
-    else if (clave == MemoryKeyVelocidad) {
-        obtenerPalabraYNumero(valor, claveFiltro, numclave);
-        if(contieneSoloNumerosYCaracteres(valor)){
-            if (numclave!=-1)
-            {
-                uint16_t parametro_velocidad = 0;  
-                parametro_velocidad |= (1 << 15);  // Establece el bit más significativo a 1
-                ESP_LOGI(HTTPServer, "MASCARA 2 BYTES CON BIT MAS SIGNIFICATIVO A 1 %d", parametro_velocidad);
-                parametro_velocidad += static_cast<uint16_t>(std::stoi(valor));
-                ESP_LOGI(HTTPServer, "suma de la velocidad de entrada %d", parametro_velocidad);
-                message_color = "color: rgb(145, 146, 53);";
-                messageVelocity = VELOCIDAD_MENSAJE + valor;
-                save_int_value(MemoryKeyVelocidad, parametro_velocidad);
-                servo_http_handler(parametro_velocidad);
-            }
-            else{
-                ESP_LOGE(HTTPServer, " el parametro tiene que tener un numero => %s", claveFiltro.c_str());
-                message = valor + " no es un parametro valido";
-                message_color = "color: red;";
-                ESP_LOGW(HTTPServer, "%s", message.c_str());
-            }
-        }
-        else{
-            ESP_LOGE(HTTPServer, " el parametro tiene que tener un numero => %s", claveFiltro.c_str());
-            message = valor + " no es un parametro valido";
-            message_color = "color: red;";
-            ESP_LOGW(HTTPServer, "%s", message.c_str());
-        }
+    else if (strcmp(clave, MemoryKeyVelocidad) == 0) {
+        handle_velocity_change(valor);
     }
-    else if(claveFiltro == MemoryKeyModoAutomatico){
-        if(valor == "ON") {
-            save_int_value(MemoryKeyModoAutomatico, 1);
-            message = "En modo automatico";
-            automaticMode = true;
-            messageMode = MODO_AUTOMATICO_ON_STR;
-            servo_http_handler(MODO_AUTOMATICO_ON);
-            background_color =  BACKGROUND_AUTOMATIC;
+    else if (strcmp(claveFiltro, MemoryKeyModoAutomatico) == 0) {
+        handle_automatic_mode_change(valor);
+    } else {
+        ESP_LOGE(HTTPServer, "El parametro tiene que tener un numero => %s", claveFiltro);
+        sprintf(message, "%s no es un parametro valido", clave);
+        set_message(message, "color: red;");
+    }
 
-        }            
-        else if(valor == "OFF") {
-            message = "Fuera de modo automatico";
-            save_int_value(MemoryKeyModoAutomatico, 0);
-            automaticMode = false;
-            messageMode = MODO_AUTOMATICO_OFF_STR;
-            servo_http_handler(MODO_AUTOMATICO_OFF);
-            background_color =  BACKGROUND_MANUAL;
+    refresh_web(req, numclave - 1, move);
 
-        }
-        else{
-            ESP_LOGE(HTTPServer, " el valor tiene que ser ON o OFF => %s", valor.c_str());
-            message = valor + " no es un parametro valido";
-            message_color = "color: red;";
-            ESP_LOGW(HTTPServer, "%s", message.c_str());
-        }
-    }
-    else{
-        ESP_LOGE(HTTPServer, " el parametro tiene que tener un numero => %s", claveFiltro.c_str());
-        message = clave + " no es un parametro valido";
-        message_color = "color: red;";
-        ESP_LOGW(HTTPServer, "%s", message.c_str());
-    }
-    refresh_web(req, numclave-1, move);
-    if (automaticMode){
+    if (automaticMode) {
         for (int indice_lista = 0; indice_lista < NUM_BUTTONS; indice_lista++) {
             update_button_state("OFF", indice_lista);
         }
     }
-    return ESP_OK;
 
+    return ESP_OK;
 }
+
 static const httpd_uri_t Interface = {
     .uri       = "/InterfaceControl",
     .method    = HTTP_GET,
@@ -618,53 +680,53 @@ static httpd_handle_t start_webserver(void)
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.stack_size = 8192; 
 
-    std::string button_name_memoryOn = "";
-    std::string button_name_memoryOff = "";
+    char button_name_memoryOn[MAX_LENGTH_VALUE] = {0};
+    char button_name_memoryOff[MAX_LENGTH_VALUE] = {0};
     uint16_t velocidad;
     uint16_t modo;
 
     if(load_int_value(MemoryKeyVelocidad, velocidad)==0){
         servo_http_handler(velocidad);
-        messageVelocity = VELOCIDAD_MENSAJE + std::to_string(velocidad & 0x00FF);
+        sprintf(messageVelocity, VELOCIDAD_MENSAJE, (velocidad & 0x00FF));
     }
     else{
-        messageVelocity = "";
+        strcpy(messageVelocity, " ");
     }
     if(load_int_value(MemoryKeyModoAutomatico, modo)==0){
         if (modo){
-            message = "En modo automatico";
+            strcpy(message, "En modo automatico");
+            strcpy(messageMode, MODO_AUTOMATICO_ON_STR);
             automaticMode = true;
-            messageMode = MODO_AUTOMATICO_ON_STR;
             servo_http_handler(MODO_AUTOMATICO_ON);
         }            
         else{
-            message = "Fuera de modo automatico";
-            messageMode = MODO_AUTOMATICO_OFF_STR;
+            strcpy(message, "Fuera de modo automatico");
+            strcpy(messageMode, MODO_AUTOMATICO_OFF_STR);
             servo_http_handler(MODO_AUTOMATICO_OFF);
         }
     }
     for (int i = 0; i < NUM_BUTTONS; i++) {
-        std::string botonON = MemoryKeyTextButtonON;
-        std::string botonOFF = MemoryKeyTextButtonOFF;
-        botonON += std::to_string(i + 1);
-        botonOFF += std::to_string(i + 1);
+        char botonON[20];
+        char botonOFF[20];
+        sprintf(botonON, MemoryKeyTextButtonON, (i + 1));
+        sprintf(botonOFF, MemoryKeyTextButtonOFF, (i + 1));
         if(load_button_name(botonON, button_name_memoryOn)==0){
-            if (button_name_memoryOn != "error"){
-                buttons[i].label_on = button_name_memoryOn;
+            if (strcmp(button_name_memoryOn, "error") !=0){
+                strcpy(buttons[i].label_on, button_name_memoryOn);
             }        
         }
 
         if(load_button_name(botonOFF, button_name_memoryOff)==0){
-            if (button_name_memoryOff != "error"){
-                buttons[i].label_off = button_name_memoryOff;
+            if (strcmp(button_name_memoryOff, "error") !=0){
+                strcpy(buttons[i].label_off, button_name_memoryOff);
             }
         }
     }
     for (int i = 0; i < NUM_BUTTONS; i++) {
-        button_state[i] = "OFF";  
-        button_next_state[i] = "ON";  
-        button_texts[i] = buttons[i].label_on;
-        button_color[i] = buttons[i].color;
+        strcpy(button_state[i], "OFF");
+        strcpy(button_next_state[i], "ON");
+        strcpy(button_texts[i], buttons[i].label_on);
+        strcpy(button_color[i], buttons[i].color);
     }
 
 #if CONFIG_IDF_TARGET_LINUX
@@ -720,7 +782,7 @@ static void connect_handler(void* arg, esp_event_base_t event_base,
         *server = start_webserver();
     }
 }
-#endif // !CONFIG_IDF_TARGET_LINUX
+#endif     
 
 void start_server_task(void *pvParameters)
 {
@@ -728,18 +790,10 @@ void start_server_task(void *pvParameters)
     /* Register event handlers to stop the server when Wi-Fi or Ethernet is disconnected,
      * and re-start it upon connection.
      */
-#if !CONFIG_IDF_TARGET_LINUX
-#ifdef CONFIG_EXAMPLE_CONNECT_WIFI
+
     ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &connect_handler, &server));
     ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, &disconnect_handler, &server));
-#endif // CONFIG_EXAMPLE_CONNECT_WIFI
-#ifdef CONFIG_EXAMPLE_CONNECT_ETHERNET
-    ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_ETH_GOT_IP, &connect_handler, &server));
-    ESP_ERROR_CHECK(esp_event_handler_register(ETH_EVENT, ETHERNET_EVENT_DISCONNECTED, &disconnect_handler, &server));
-#endif // CONFIG_EXAMPLE_CONNECT_ETHERNET
-#endif // !CONFIG_IDF_TARGET_LINUX
 
-    /* Start the server for the first time */
     server = start_webserver();
 
     while (server) {
