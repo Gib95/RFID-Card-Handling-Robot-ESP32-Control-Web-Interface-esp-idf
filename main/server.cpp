@@ -125,7 +125,7 @@ char button_next_state[NUM_BUTTONS][MAX_LENGTH_VALUE];
 void save_button_name(char * buttonKey, char * button_name) {
     esp_err_t err;
     std::unique_ptr<nvs::NVSHandle> handle = nvs::open_nvs_handle("storage", NVS_READWRITE, &err);
-    ESP_LOGW(HTTPServer, "Escribiendo valor para clave %s", button_name);
+    ESP_LOGW(HTTPServer, "Escribiendo valor para clave %s", buttonKey);
     err = handle->set_string(buttonKey, button_name);
     printf((err != ESP_OK) ? "Failed!\n" : "Done\n");
 
@@ -169,7 +169,7 @@ int load_button_name(char* button_name, char * button_name_found) {
     if (err != ESP_OK) {
         printf("Error (%s) opening NVS handle!\n", esp_err_to_name(err));
     } else {
-        printf("Done\n");
+        printf(" Done\n");
 
         // Obtén la cadena del NVS
         err = handle->get_string(button_name, button_name_found, MAX_LENGTH_VALUE);
@@ -523,7 +523,7 @@ void update_button_label(int numclave, char* label, bool is_on) {
     }
     
     char ButtonKey[MAX_LENGTH_VALUE];
-    sprintf(ButtonKey, "%s%d", is_on ? MemoryKeyTextButtonON : MemoryKeyTextButtonOFF, numclave);
+    sprintf(ButtonKey, is_on ? MemoryKeyTextButtonON : MemoryKeyTextButtonOFF, numclave);
     save_button_name(ButtonKey, label);
 }
 

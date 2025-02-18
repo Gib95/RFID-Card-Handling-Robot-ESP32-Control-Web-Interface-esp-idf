@@ -3,7 +3,7 @@
 #include "servoMotor.h"
 #include <math.h>
 #define ANGLE_MOTOR (180/10)
-#define POSICION_ON 50
+#define POSICION_ON 60
 #define POSICION_OFF 0
 
 std::unordered_map<uint32_t, int> motorMap = {
